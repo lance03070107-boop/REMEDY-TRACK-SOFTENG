@@ -1,0 +1,148 @@
+name: Flutter CI & Release Verification
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  analyze-and-test:
+    name: Flutter Analyze & Unit Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Install Flutter Dependencies
+        run: flutter pub get
+
+      - name: Static Analysis
+        run: flutter analyze
+
+      - name: Run Unit & Widget Tests
+        run: flutter test --coverage
+
+  build-android-release:
+    name: Android Release AAB Build & Shrinking Verification
+    needs: analyze-and-test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Install Dependencies
+        run: flutter pub get
+
+      - name: Configure Android Release Signing
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "Using production signing credentials from repository secrets..."
+            echo "$KEYSTORE_BASE64" | base64 --decode > android/app/upload-keystore.jks
+            cat <<EOF > android/key.properties
+            storePassword=$KEYSTORE_PASSWORD
+            keyPassword=$KEY_PASSWORD
+            keyAlias=$KEY_ALIAS
+            storeFile=upload-keystore.jks
+          EOF
+          else
+            echo "No production signing secret found. Generating CI verification keystore..."
+            keytool -genkey -v -keystore android/app/ci-test-key.jks -alias ci-key \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -storepass citestpassword -keypass citestpassword \
+              -dname "CN=CI Tester, OU=Dev, O=RemedyTrack, L=Santa Cruz, ST=Laguna, C=PH"
+            cat <<EOF > android/key.properties
+            storePassword=citestpassword
+            keyPassword=citestpassword
+            keyAlias=ci-key
+            storeFile=ci-test-key.jks
+          EOF
+          fi
+
+      - name: Build Android App Bundle (.aab) with R8 Shrinking
+        run: flutter build appbundle --release --no-pub
+
+      - name: Build Android APK (.apk) with R8 Shrinking
+        run: flutter build apk --release --no-pub
+
+      - name: Upload Release Bundle Artifact (.aab)
+        uses: actions/upload-artifact@v4
+        with:
+          name: remedytrack-release-aab
+          path: build/app/outputs/bundle/release/*.aab
+          if-no-files-found: error
+
+      - name: Upload Release APK Artifact (.apk)
+        uses: actions/upload-artifact@v4
+        with:
+          name: remedytrack-release-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
+
+  build-ios-ipa:
+    name: iOS Release IPA Build (macOS Runner)
+    needs: analyze-and-test
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Install Dependencies
+        run: flutter pub get
+
+      - name: Build iOS Archive (.ipa)
+        run: flutter build ipa --no-codesign
+
+      - name: Package Payload as Installable IPA
+        run: |
+          mkdir -p build/ios/ipa_payload/Payload
+          cp -r build/ios/archive/Runner.xcarchive/Products/Applications/Runner.app build/ios/ipa_payload/Payload/
+          cd build/ios/ipa_payload
+          zip -qr ../../../RemedyTrack-unsigned.ipa Payload
+
+      - name: Upload iOS IPA Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: remedytrack-ios-ipa
+          path: RemedyTrack-unsigned.ipa
+          if-no-files-found: error
+
+

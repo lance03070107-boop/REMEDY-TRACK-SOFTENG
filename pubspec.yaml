@@ -1,0 +1,91 @@
+name: remedy_track
+description: RemedyTrack - Your Personal Health and Dosage Companion
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+  provider: ^6.1.2
+  go_router: ^14.2.0
+  firebase_core: ^3.6.0
+  firebase_auth: ^5.3.1
+  cloud_firestore: ^5.4.4
+  firebase_messaging: ^15.1.3
+  flutter_local_notifications: ^17.2.2
+  timezone: ^0.9.4
+  permission_handler: ^11.3.1
+  shared_preferences: ^2.3.2
+  intl: ^0.20.3
+  uuid: ^4.5.1
+  fl_chart: ^0.69.0
+  local_auth: ^2.3.0
+  pdf: ^3.11.1
+  printing: ^5.13.2
+  cupertino_icons: ^1.0.8
+  flutter_secure_storage: ^11.2.0
+  firebase_app_check: ^0.3.2+10
+  google_sign_in: ^7.2.0
+  sign_in_with_apple: ^8.2.0
+  cloud_functions: ^5.6.2
+  firebase_crashlytics: ^4.1.3
+  firebase_analytics: ^11.3.3
+  connectivity_plus: ^6.0.5
+  workmanager: ^0.10.10
+  audioplayers: ^6.8.1
+  file_picker: ^13.1.0
+  path_provider: ^2.1.6
+  path: ^1.9.1
+  flutter_timezone: ^5.1.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+  flutter_launcher_icons: ^0.13.1
+  flutter_native_splash: ^2.4.1
+
+dependency_overrides:
+  path_provider_foundation: 2.4.0
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  remove_alpha_ios: true
+  image_path: "assets/branding/app_icon.png"
+  adaptive_icon_background: "#9BD1F2"
+  adaptive_icon_foreground: "assets/branding/app_icon.png"
+  notification_icon:
+    android: true
+    image_path: "assets/branding/notification_icon.png"
+
+flutter_native_splash:
+  color: "#F4FAFE"
+  color_dark: "#163247"
+  image: assets/branding/splash_logo.png
+  android_12:
+    color: "#F4FAFE"
+    color_dark: "#163247"
+    image: assets/branding/splash_logo.png
+  android: true
+  ios: true
+  web: false
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/branding/alarm_frames/
+    - assets/branding/med_forms/
+    - assets/branding/app_icon.png
+    - assets/branding/splash_logo.png
+    - assets/sounds/remedy_alarm_beep.wav
+    - assets/sounds/remedy_alarm_bell.wav
+    - assets/sounds/remedy_alarm_classic.wav
+    - assets/sounds/remedy_alarm_digital.wav
+    - assets/sounds/remedy_alarm_gentle.wav
+    - assets/sounds/remedy_alarm_harp.wav

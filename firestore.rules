@@ -1,0 +1,916 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Assumed Data Model & Architecture Overview
+    // ===============================================================
+    //
+    // RemedyTrack: RA 10173 (Data Privacy Act of 2012) Compliant Health & Medication Platform
+    //
+    // 1. Collection: users/{userId}
+    //    Document ID: Firebase Auth UID of the user
+    //    Fields:
+    //      - id: string (required, 1..128 chars, matches auth.uid, immutable)
+    //      - email: string (required, valid email, <= 120 chars, immutable by client)
+    //      - displayName: string (required, 1..60 chars)
+    //      - age: number (optional, 0..150)
+    //      - isCaregiver: bool (optional)
+    //      - caregiverIds: list of strings (optional, max 50 items, 1..128 chars, immutable by client)
+    //      - dependentIds: list of strings (optional, max 50 items, 1..128 chars, immutable by client)
+    //      - fcmToken: string or null (optional, <= 500 chars)
+    //      - fcmTokens: list of strings or null (optional, max 50 items, 1..500 chars, server-managed / immutable by client)
+    //      - caregiverNotificationEnabled: bool (optional)
+    //      - caregiverEmail: string or null (optional, <= 120 chars)
+    //      - emailOtpVerified: bool (optional, false/absent on client create, server-managed / immutable by client)
+    //      - emailVerifiedAt: timestamp or ISO string or null (optional, written by verifyEmailOtp Cloud Function, immutable by client)
+    //      - phoneNumber: string (optional, <= 30 chars)
+    //      - phoneVerified: bool (optional, immutable by client)
+    //      - timezoneOffsetMinutes: number (optional, -720..840)
+    //      - quietHoursStart: string or null (optional, HH:MM 24h format or empty)
+    //      - quietHoursEnd: string or null (optional, HH:MM 24h format or empty)
+    //      - shareMedicationNamesWithCaregivers: bool (optional)
+    //      - createdAt: timestamp or ISO string (required, immutable)
+    //      - updatedAt: timestamp or ISO string (optional)
+    //
+    // 2. Subcollection: users/{userId}/emergency/{cardId} (e.g. 'card')
+    //    Fields:
+    //      - id: string (required, <= 100 chars)
+    //      - userId: string (required, matches parent userId & auth.uid, immutable)
+    //      - bloodType: string (optional, <= 20 chars)
+    //      - allergies: list of strings (optional, max 50 items)
+    //      - chronicConditions: list of strings (optional, max 50 items)
+    //      - emergencyContactName: string (required, 1..100 chars)
+    //      - emergencyContactPhone: string (required, 1..50 chars)
+    //      - emergencyContactRelationship: string (optional, <= 50 chars)
+    //      - physicianName: string (optional, <= 100 chars)
+    //      - physicianPhone: string (optional, <= 50 chars)
+    //      - createdAt: timestamp or ISO string (optional)
+    //      - updatedAt: timestamp or ISO string (optional)
+    //
+    // 3. Collection: medications/{medicationId}
+    //    Fields:
+    //      - id: string (required, <= 100 chars, immutable)
+    //      - userId: string (required, matches auth.uid, immutable)
+    //      - name: string (required, 1..60 chars)
+    //      - genericName: string (optional, <= 60 chars)
+    //      - strength: string (required, 1..30 chars)
+    //      - form: string (optional, <= 50 chars)
+    //      - doseAmount: number (required, > 0, <= 100)
+    //      - instructions: string (optional, <= 200 chars)
+    //      - notes: string (optional, <= 300 chars)
+    //      - colorTag: number (optional)
+    //      - iconTag: string (optional, <= 50 chars)
+    //      - isPrn: bool (optional)
+    //      - minIntervalHours: number (optional, 0..72)
+    //      - dailyMaxDose: number (optional, 0..100)
+    //      - schedule: map or null (optional; when non-null: frequency in
+    //        ['daily','specificWeekdays','everyXHours','everyXDays','cycleBased'],
+    //        timesOfDay list<=12 of 4..10 char strings, weekdays optional list<=7 of 1..7,
+    //        intervalValue 1..365, cycleActiveDays 1..365, cycleRestDays 0..365,
+    //        startDate required, endDate/updatedAt optional dates, alarmSoundId/customSoundPath/vibrationEnabled optional)
+    //      - alarmSoundId: string (optional, 0..100 chars)
+    //      - customSoundPath: string or null (optional, 0..500 chars)
+    //      - vibrationEnabled: bool (optional)
+    //      - isActive: bool (optional)
+    //      - createdAt: timestamp or ISO string (required, immutable)
+    //      - updatedAt: timestamp or ISO string (optional)
+    //
+    // 4. Collection: inventory/{inventoryId}
+    //    Fields:
+    //      - id: string (required, <= 100 chars, immutable)
+    //      - userId: string (required, matches auth.uid, immutable)
+    //      - medicationId: string (required, <= 100 chars, immutable)
+    //      - currentStock: number (required, >= 0, <= 9999)
+    //      - unit: string (optional, <= 50 chars)
+    //      - lowStockThreshold: number (optional, >= 0, <= 9999)
+    //      - refillQuantity: number (optional, >= 0, <= 1000000)
+    //      - lastRefillDate: timestamp or ISO string (optional)
+    //      - notes: string (optional, <= 300 chars)
+    //      - createdAt: timestamp or ISO string (optional)
+    //      - updatedAt: timestamp or ISO string (optional)
+    //
+    // 5. Collection: intake_logs/{logId}
+    //    Fields:
+    //      - id: string (required, 1..128 chars, immutable)
+    //      - userId: string (required, matches auth.uid, immutable)
+    //      - medicationId: string (required, <= 100 chars, immutable)
+    //      - medicationName: string (required, 1..100 chars)
+    //      - doseAmount: number (required, > 0, <= 100)
+    //      - scheduledTime: timestamp or ISO string (required, immutable)
+    //      - recordedTime: timestamp or ISO string (optional)
+    //      - status: string (required, 'taken'|'late'|'missed'|'skipped'|'snoozed'|'pending')
+    //      - snoozeUntil: timestamp or ISO string (optional)
+    //      - snoozeCount: number (optional, 0..10)
+    //      - notes: string (optional, <= 300 chars)
+    //      - isPrn: bool (optional)
+    //      - caregiverAlertSent: bool or null (optional, server-written only, immutable by client)
+    //      - alertSentAt: timestamp or ISO string or null (optional, server-written only, immutable by client)
+    //      - reconciledAt: timestamp or ISO string or null (optional, server-written only, immutable by client)
+    //      - reconciledBy: string or null (optional, <= 64 chars, server-written only, immutable by client)
+    //      - createdAt: timestamp or ISO string (optional)
+    //      - updatedAt: timestamp or ISO string (optional)
+    //
+    // 6. Collection: caregivers/{relationshipId}
+    //    Document ID: {patientId}_{caregiverId}
+    //    Client-writable on create ONLY via atomic WriteBatch redeeming a valid pending invite;
+    //    updatable only to 'revoked' and deletable by either patient or caregiver.
+    //    Fields:
+    //      - id: string (required, 3..257 chars, matches {patientId}_{caregiverId}, immutable)
+    //      - patientId: string (required, 1..128 chars, != caregiverId, immutable)
+    //      - patientName: string (required, 1..60 chars, immutable)
+    //      - caregiverId: string (required, 1..128 chars, matches auth.uid on create, immutable)
+    //      - caregiverName: string or null (optional, 1..60 chars, immutable)
+    //      - status: string (required, 'active'|'revoked'; 'active' on create, 'revoked' on update)
+    //      - permissions: list of strings (optional, max 2 items, subset of ['view_adherence', 'receive_alerts'], immutable)
+    //      - inviteCode: string (required, 6 chars ^[A-Z0-9]{6}$, proof of redeemed invite, immutable)
+    //      - createdAt: timestamp or ISO string (required, immutable)
+    //      - updatedAt: timestamp or ISO string (optional)
+    //
+    // 7. Collection: caregiver_alerts/{alertId}
+    //    Fields:
+    //      - dependentName: string (required, 1..100 chars)
+    //      - medicationName: string (required, 1..100 chars)
+    //      - scheduledTime: string (required, 1..50 chars)
+    //      - caregiverToken: string (required, 1..500 chars)
+    //      - patientId: string (required, 1..128 chars, != caregiverId, immutable)
+    //      - caregiverId: string (required, 1..128 chars, != patientId, immutable)
+    //      - status: string (required, 1..50 chars; 'pending' on create)
+    //      - createdAt: timestamp or ISO string (required, immutable)
+    //
+    // 8. Collection: otp_challenges/{uid}
+    //    Server-side Cloud Functions only. All direct client read/write denied.
+    //
+    // 9. Collection: caregiver_invites/{code}
+    //    Document ID: 6-character uppercase alphanumeric pairing code (^[A-Z0-9]{6}$)
+    //    Short-lived (<= 25h) single-use pairing codes. Owning patient may list/create/expire/delete;
+    //    authenticated users knowing an exact code may get pending invites or missing docs (resource == null)
+    //    and non-patients may atomically redeem active pending invites.
+    //    Fields:
+    //      - code: string (required, matches doc ID & ^[A-Z0-9]{6}$, immutable)
+    //      - patientId: string (required, 1..128 chars, matches auth.uid on create, immutable)
+    //      - patientName: string (required, 1..60 chars, immutable)
+    //      - allowedMedicationIds: list of strings (optional, max 100 items, immutable)
+    //      - status: string (required, 'pending'|'accepted'|'expired'; 'pending' on create)
+    //      - createdAt: timestamp or ISO string (required, immutable)
+    //      - expiresAt: timestamp or ISO string (required, immutable; timestamp must be in (request.time, request.time + 25h] on create)
+    //      - usedBy: string or null (optional, 1..128 chars; null/absent on create, matches auth.uid on accept)
+    //      - usedAt: timestamp or ISO string or null (optional)
+    //      - updatedAt: timestamp or ISO string or null (optional)
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // General Helper Functions
+    // ===============================================================
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isOtpVerified() {
+      return isAuthenticated() && (
+        request.auth.token.get('email_verified', false) == true ||
+        request.auth.token.get('emailOtpVerified', false) == true ||
+        (
+          exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('emailOtpVerified', false) == true
+        )
+      );
+    }
+
+    function hasCaregiverInProfile(userDoc, caregiverId) {
+      return ('caregiverIds' in userDoc.data) &&
+             (userDoc.data.caregiverIds is list) &&
+             (caregiverId in userDoc.data.caregiverIds);
+    }
+
+    function isCaregiverDocActiveFor(relDoc, patientId, caregiverId) {
+      return relDoc.data.patientId == patientId &&
+             relDoc.data.caregiverId == caregiverId &&
+             relDoc.data.status == 'active';
+    }
+
+    function isActiveCaregiverRelationship(patientId, caregiverId) {
+      return isAuthenticated() &&
+             patientId != caregiverId &&
+             exists(/databases/$(database)/documents/caregivers/$(patientId + '_' + caregiverId)) &&
+             isCaregiverDocActiveFor(
+               get(/databases/$(database)/documents/caregivers/$(patientId + '_' + caregiverId)),
+               patientId,
+               caregiverId
+             );
+    }
+
+    // Checks caregiver authorization via active caregiver doc or patient profile caregiverIds
+    function isLinkedCaregiver(patientId, caregiverId) {
+      return isAuthenticated() &&
+             patientId != caregiverId && (
+        (
+          exists(/databases/$(database)/documents/caregivers/$(patientId + '_' + caregiverId)) &&
+          isCaregiverDocActiveFor(
+            get(/databases/$(database)/documents/caregivers/$(patientId + '_' + caregiverId)),
+            patientId,
+            caregiverId
+          )
+        ) ||
+        (
+          !exists(/databases/$(database)/documents/caregivers/$(patientId + '_' + caregiverId)) &&
+          exists(/databases/$(database)/documents/users/$(patientId)) &&
+          hasCaregiverInProfile(
+            get(/databases/$(database)/documents/users/$(patientId)),
+            caregiverId
+          )
+        ) ||
+        (
+          exists(/databases/$(database)/documents/caregivers/$(caregiverId + '_' + patientId)) &&
+          isCaregiverDocActiveFor(
+            get(/databases/$(database)/documents/caregivers/$(caregiverId + '_' + patientId)),
+            patientId,
+            caregiverId
+          )
+        )
+      );
+    }
+
+    function isCaregiverOf(patientId) {
+      return isLinkedCaregiver(patientId, request.auth.uid);
+    }
+
+    function isActiveCaregiverFor(patientId) {
+      return isCaregiverOf(patientId);
+    }
+
+    function isAllowedMedicationForCaregiver(patientId, medId) {
+      return !exists(/databases/$(database)/documents/caregivers/$(patientId + '_' + request.auth.uid)) ||
+             !('allowedMedicationIds' in get(/databases/$(database)/documents/caregivers/$(patientId + '_' + request.auth.uid)).data) ||
+             get(/databases/$(database)/documents/caregivers/$(patientId + '_' + request.auth.uid)).data.allowedMedicationIds == null ||
+             get(/databases/$(database)/documents/caregivers/$(patientId + '_' + request.auth.uid)).data.allowedMedicationIds.size() == 0 ||
+             medId in get(/databases/$(database)/documents/caregivers/$(patientId + '_' + request.auth.uid)).data.allowedMedicationIds ||
+             resource.data.id in get(/databases/$(database)/documents/caregivers/$(patientId + '_' + request.auth.uid)).data.allowedMedicationIds;
+    }
+
+    function canCaregiverReadMedication(patientId, medId) {
+      return isActiveCaregiverFor(patientId) &&
+             isAllowedMedicationForCaregiver(patientId, medId);
+    }
+
+    function isPatientOrCaregiver(patientId) {
+      return isOwner(patientId) || isCaregiverOf(patientId);
+    }
+
+    // Required & Allowed Fields
+    function hasRequiredFields(data, fields) {
+      return data.keys().hasAll(fields);
+    }
+
+    function hasOnlyAllowedFields(data, fields) {
+      return data.keys().hasOnly(fields);
+    }
+
+    function areImmutableFieldsUnchanged(fields) {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(fields);
+    }
+
+    // Type & Format Validators
+    function isValidEmail(email) {
+      return email is string &&
+        email.matches('^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$');
+    }
+
+    function isTimestampOrDateStr(val) {
+      return (val is string && val.size() >= 10 && val.size() <= 50) || val is timestamp;
+    }
+
+    function isValidString(val, minLen, maxLen) {
+      return val is string && val.size() >= minLen && val.size() <= maxLen;
+    }
+
+    function isValidOptionalString(data, field, minLen, maxLen) {
+      let val = data.get(field, null);
+      return val == null || (
+        val is string && val.size() >= minLen && val.size() <= maxLen
+      );
+    }
+
+    function isValidOptionalDate(data, field) {
+      let val = data.get(field, null);
+      return val == null || isTimestampOrDateStr(val);
+    }
+
+    function isOptionalTimestamp(data, field) {
+      let val = data.get(field, null);
+      return val == null || isTimestampOrDateStr(val);
+    }
+
+    function isNumeric(val) {
+      return val is number;
+    }
+
+    function isValidOptionalNumber(data, field, minVal, maxVal) {
+      let val = data.get(field, null);
+      return val == null || (
+        val is number && val >= minVal && val <= maxVal
+      );
+    }
+
+    function isValidOptionalBool(data, field) {
+      let val = data.get(field, null);
+      return val == null || val is bool;
+    }
+
+    // Callers pass data.get(field, null) directly so the map lookup happens once
+    // and populated values short-circuit before `v == null` to stay under the
+    // 1,000-expression Firestore Rules evaluation limit.
+    function isOptStr(v, maxLen) {
+      return (v is string && v.size() <= maxLen) || v == null;
+    }
+
+    function isOptNum(v, minVal, maxVal) {
+      return (v is number && v >= minVal && v <= maxVal) || v == null;
+    }
+
+    function isOptBool(v) {
+      return v is bool || v == null;
+    }
+
+    function isOptInt(v) {
+      return (v is int || v is number) || v == null;
+    }
+
+    function isOptDate(v) {
+      return isTimestampOrDateStr(v) || v == null;
+    }
+
+    function isOptStringList(v, maxItems, minStrLen, maxStrLen) {
+      return (v is list && v.size() <= maxItems && (
+        v.size() == 0 || (
+          isValidString(v[0], minStrLen, maxStrLen) &&
+          isValidString(v[v.size() - 1], minStrLen, maxStrLen)
+        )
+      )) || v == null;
+    }
+
+    function isOptQuietHourStr(v) {
+      return (v is string && v.size() <= 5 && (v == '' || v.matches('^([01]?[0-9]|2[0-3]):[0-5][0-9]$'))) || v == null;
+    }
+
+    // ===============================================================
+    // Domain Validator Functions
+    // ===============================================================
+
+    function isValidUser(data) {
+      return hasRequiredFields(data, ['id', 'email', 'displayName', 'createdAt']) &&
+        hasOnlyAllowedFields(data, [
+          'id', 'email', 'displayName', 'age', 'isCaregiver', 'caregiverIds',
+          'dependentIds', 'fcmToken', 'fcmTokens', 'caregiverNotificationEnabled',
+          'caregiverEmail', 'emailOtpVerified', 'phoneNumber', 'phoneVerified',
+          'emailVerifiedAt', 'timezoneOffsetMinutes', 'quietHoursStart',
+          'quietHoursEnd', 'shareMedicationNamesWithCaregivers',
+          'createdAt', 'updatedAt'
+        ]) &&
+        isValidString(data.id, 1, 128) &&
+        data.id == request.auth.uid &&
+        data.email is string && data.email.size() <= 120 && isValidEmail(data.email) &&
+        isValidString(data.displayName, 1, 60) &&
+        isOptNum(data.get('age', null), 0, 150) &&
+        isTimestampOrDateStr(data.createdAt) &&
+        isOptBool(data.get('isCaregiver', null)) &&
+        isOptBool(data.get('caregiverNotificationEnabled', null)) &&
+        isOptBool(data.get('emailOtpVerified', null)) &&
+        isOptBool(data.get('phoneVerified', null)) &&
+        isOptBool(data.get('shareMedicationNamesWithCaregivers', null)) &&
+        isOptDate(data.get('emailVerifiedAt', null)) &&
+        isOptStr(data.get('phoneNumber', null), 30) &&
+        isOptStringList(data.get('caregiverIds', null), 50, 1, 128) &&
+        isOptStringList(data.get('dependentIds', null), 50, 1, 128) &&
+        isOptStr(data.get('fcmToken', null), 500) &&
+        isOptStringList(data.get('fcmTokens', null), 50, 1, 500) &&
+        isOptStr(data.get('caregiverEmail', null), 120) &&
+        isOptNum(data.get('timezoneOffsetMinutes', null), -720, 840) &&
+        isOptQuietHourStr(data.get('quietHoursStart', null)) &&
+        isOptQuietHourStr(data.get('quietHoursEnd', null)) &&
+        isOptDate(data.get('updatedAt', null));
+    }
+
+    function isValidEmergencyCard(data, userId) {
+      return hasRequiredFields(data, ['id', 'userId', 'emergencyContactName', 'emergencyContactPhone']) &&
+        hasOnlyAllowedFields(data, [
+          'id', 'userId', 'bloodType', 'allergies', 'chronicConditions',
+          'emergencyContactName', 'emergencyContactPhone',
+          'emergencyContactRelationship', 'physicianName', 'physicianPhone',
+          'createdAt', 'updatedAt'
+        ]) &&
+        data.id is string && data.id.size() <= 100 &&
+        data.userId == userId && data.userId == request.auth.uid &&
+        isValidString(data.emergencyContactName, 1, 100) &&
+        isValidString(data.emergencyContactPhone, 1, 50) &&
+        isValidOptionalString(data, 'bloodType', 1, 20) &&
+        isValidOptionalString(data, 'emergencyContactRelationship', 1, 50) &&
+        isValidOptionalString(data, 'physicianName', 0, 100) &&
+        isValidOptionalString(data, 'physicianPhone', 0, 50) &&
+        (!( 'allergies' in data ) || data.allergies == null || (data.allergies is list && data.allergies.size() <= 50)) &&
+        (!( 'chronicConditions' in data ) || data.chronicConditions == null || (data.chronicConditions is list && data.chronicConditions.size() <= 50)) &&
+        isValidOptionalDate(data, 'createdAt') &&
+        isValidOptionalDate(data, 'updatedAt');
+    }
+
+    function isValidTimeSlot(v) {
+      return v is string && v.size() >= 4 && v.size() <= 10;
+    }
+
+    function isWeekdayInt(d) {
+      return (d is int || d is number) && d >= 1 && d <= 7;
+    }
+
+    function isValidScheduleTimes(times) {
+      return times is list && times.size() <= 12 && (
+        times.size() == 0 || (
+          isValidTimeSlot(times[0]) &&
+          isValidTimeSlot(times[times.size() - 1])
+        )
+      );
+    }
+
+    function isOptWeekdays(wd) {
+      return (wd is list && wd.size() <= 7 && (
+        wd.size() == 0 || (
+          isWeekdayInt(wd[0]) &&
+          isWeekdayInt(wd[wd.size() - 1])
+        )
+      )) || wd == null;
+    }
+
+    function isValidSchedule(s) {
+      return s is map &&
+        s.keys().hasAll(['frequency', 'timesOfDay', 'startDate']) &&
+        s.keys().hasOnly([
+          'frequency', 'timesOfDay', 'weekdays', 'intervalValue',
+          'cycleActiveDays', 'cycleRestDays', 'startDate', 'endDate',
+          'updatedAt', 'alarmSoundId', 'customSoundPath', 'vibrationEnabled'
+        ]) &&
+        s.frequency in [
+          'daily', 'specificWeekdays', 'everyXHours', 'everyXDays', 'cycleBased'
+        ] &&
+        isValidScheduleTimes(s.timesOfDay) &&
+        isOptWeekdays(s.get('weekdays', null)) &&
+        isOptNum(s.get('intervalValue', null), 1, 365) &&
+        isOptNum(s.get('cycleActiveDays', null), 1, 365) &&
+        isOptNum(s.get('cycleRestDays', null), 0, 365) &&
+        isTimestampOrDateStr(s.startDate) &&
+        isOptDate(s.get('endDate', null)) &&
+        isOptDate(s.get('updatedAt', null)) &&
+        isOptStr(s.get('alarmSoundId', null), 100) &&
+        isOptStr(s.get('customSoundPath', null), 500) &&
+        isOptBool(s.get('vibrationEnabled', null));
+    }
+
+    function isOptSchedule(s) {
+      return isValidSchedule(s) || s == null;
+    }
+
+    function isValidMedication(data) {
+      return hasRequiredFields(data, ['id', 'userId', 'name', 'strength', 'doseAmount', 'createdAt']) &&
+        hasOnlyAllowedFields(data, [
+          'id', 'userId', 'name', 'genericName', 'strength', 'form',
+          'doseAmount', 'instructions', 'notes', 'colorTag', 'iconTag',
+          'isPrn', 'minIntervalHours', 'dailyMaxDose', 'schedule',
+          'alarmSoundId', 'customSoundPath', 'vibrationEnabled',
+          'createdAt', 'updatedAt', 'isActive'
+        ]) &&
+        isValidString(data.id, 1, 100) &&
+        data.userId == request.auth.uid &&
+        isValidString(data.name, 1, 60) &&
+        isOptStr(data.get('genericName', null), 60) &&
+        data.strength is string && data.strength.size() >= 0 && data.strength.size() <= 30 &&
+        isOptStr(data.get('instructions', null), 200) &&
+        data.doseAmount is number && data.doseAmount > 0 && data.doseAmount <= 100 &&
+        isTimestampOrDateStr(data.createdAt) &&
+        isOptStr(data.get('form', null), 50) &&
+        isOptStr(data.get('notes', null), 300) &&
+        isOptStr(data.get('iconTag', null), 50) &&
+        isOptInt(data.get('colorTag', null)) &&
+        isOptNum(data.get('minIntervalHours', null), 0, 72) &&
+        isOptNum(data.get('dailyMaxDose', null), 0, 100) &&
+        isOptBool(data.get('isPrn', null)) &&
+        isOptBool(data.get('isActive', null)) &&
+        isOptSchedule(data.get('schedule', null)) &&
+        isOptStr(data.get('alarmSoundId', null), 100) &&
+        isOptStr(data.get('customSoundPath', null), 500) &&
+        isOptBool(data.get('vibrationEnabled', null)) &&
+        isOptDate(data.get('updatedAt', null));
+    }
+
+    function isValidInventoryItem(data) {
+      return hasRequiredFields(data, ['id', 'userId', 'medicationId', 'currentStock']) &&
+        hasOnlyAllowedFields(data, [
+          'id', 'userId', 'medicationId', 'currentStock', 'unit',
+          'lowStockThreshold', 'refillQuantity', 'lastRefillDate', 'notes',
+          'createdAt', 'updatedAt'
+        ]) &&
+        data.id is string && data.id.size() <= 100 &&
+        data.userId == request.auth.uid &&
+        isValidString(data.medicationId, 1, 100) &&
+        data.currentStock is number && data.currentStock >= 0 && data.currentStock <= 9999 &&
+        (!('lowStockThreshold' in data) || (data.lowStockThreshold is number && data.lowStockThreshold >= 0 && data.lowStockThreshold <= 9999)) &&
+        isValidOptionalString(data, 'unit', 0, 50) &&
+        isValidOptionalNumber(data, 'refillQuantity', 0, 1000000) &&
+        isValidOptionalDate(data, 'lastRefillDate') &&
+        isValidOptionalString(data, 'notes', 0, 300) &&
+        isValidOptionalDate(data, 'createdAt') &&
+        isValidOptionalDate(data, 'updatedAt');
+    }
+
+    function isValidIntakeLog(data) {
+      return hasRequiredFields(data, ['id', 'userId', 'medicationId', 'medicationName', 'doseAmount', 'scheduledTime', 'status']) &&
+        hasOnlyAllowedFields(data, [
+          'id', 'userId', 'medicationId', 'medicationName', 'doseAmount',
+          'scheduledTime', 'recordedTime', 'status', 'snoozeUntil', 'snoozeCount',
+          'notes', 'isPrn', 'caregiverAlertSent', 'alertSentAt',
+          'reconciledAt', 'reconciledBy', 'createdAt', 'updatedAt'
+        ]) &&
+        isValidString(data.id, 1, 128) &&
+        data.userId == request.auth.uid &&
+        isValidString(data.medicationId, 1, 100) &&
+        isValidString(data.medicationName, 1, 100) &&
+        data.doseAmount is number && data.doseAmount > 0 && data.doseAmount <= 100 &&
+        isTimestampOrDateStr(data.scheduledTime) &&
+        data.status is string &&
+        data.status in ['taken', 'late', 'missed', 'skipped', 'snoozed', 'pending'] &&
+        isOptDate(data.get('recordedTime', null)) &&
+        isOptDate(data.get('snoozeUntil', null)) &&
+        isOptNum(data.get('snoozeCount', null), 0, 10) &&
+        isOptStr(data.get('notes', null), 300) &&
+        isOptBool(data.get('isPrn', null)) &&
+        isOptBool(data.get('caregiverAlertSent', null)) &&
+        isOptDate(data.get('alertSentAt', null)) &&
+        isOptDate(data.get('reconciledAt', null)) &&
+        isOptStr(data.get('reconciledBy', null), 64) &&
+        isOptDate(data.get('createdAt', null)) &&
+        isOptDate(data.get('updatedAt', null));
+    }
+
+    function isValidCaregiverAlert(data) {
+      return hasRequiredFields(data, [
+          'dependentName', 'medicationName', 'scheduledTime',
+          'caregiverToken', 'patientId', 'caregiverId', 'status', 'createdAt'
+        ]) &&
+        hasOnlyAllowedFields(data, [
+          'dependentName', 'medicationName', 'scheduledTime',
+          'caregiverToken', 'patientId', 'caregiverId', 'status', 'createdAt'
+        ]) &&
+        isValidString(data.dependentName, 1, 100) &&
+        isValidString(data.medicationName, 1, 100) &&
+        isValidString(data.scheduledTime, 1, 50) &&
+        isValidString(data.caregiverToken, 1, 500) &&
+        isValidString(data.patientId, 1, 128) &&
+        isValidString(data.caregiverId, 1, 128) &&
+        data.patientId != data.caregiverId &&
+        isValidString(data.status, 1, 50) &&
+        isTimestampOrDateStr(data.createdAt);
+    }
+
+    function isValidCaregiverInvite(data, code) {
+      return hasRequiredFields(data, [
+          'code', 'patientId', 'patientName', 'status', 'createdAt', 'expiresAt'
+        ]) &&
+        hasOnlyAllowedFields(data, [
+          'code', 'patientId', 'patientName', 'allowedMedicationIds',
+          'status', 'createdAt', 'expiresAt', 'usedBy', 'usedAt', 'updatedAt'
+        ]) &&
+        data.code is string &&
+        data.code.size() == 6 &&
+        data.code == code &&
+        data.code.matches('^[A-Z0-9]{6}$') &&
+        isValidString(data.patientId, 1, 128) &&
+        isValidString(data.patientName, 1, 60) &&
+        (!('allowedMedicationIds' in data) || data.allowedMedicationIds == null || (
+          data.allowedMedicationIds is list &&
+          data.allowedMedicationIds.size() <= 100 &&
+          (
+            data.allowedMedicationIds.size() == 0 || (
+              isValidString(data.allowedMedicationIds[0], 1, 100) &&
+              isValidString(data.allowedMedicationIds[data.allowedMedicationIds.size() - 1], 1, 100)
+            )
+          )
+        )) &&
+        data.status is string &&
+        data.status in ['pending', 'accepted', 'expired'] &&
+        isTimestampOrDateStr(data.createdAt) &&
+        isTimestampOrDateStr(data.expiresAt) &&
+        isValidOptionalString(data, 'usedBy', 1, 128) &&
+        isValidOptionalDate(data, 'usedAt') &&
+        isValidOptionalDate(data, 'updatedAt') &&
+        (data.status != 'pending' || !('usedBy' in data) || data.usedBy == null) &&
+        (data.status != 'accepted' || ('usedBy' in data && isValidString(data.usedBy, 1, 128)));
+    }
+
+    function isValidCaregiverRelationship(data, relationshipId) {
+      return hasRequiredFields(data, [
+          'id', 'patientId', 'patientName', 'caregiverId', 'status', 'inviteCode', 'createdAt'
+        ]) &&
+        hasOnlyAllowedFields(data, [
+          'id', 'patientId', 'patientName', 'caregiverId', 'caregiverName',
+          'status', 'permissions', 'allowedMedicationIds', 'inviteCode', 'createdAt', 'updatedAt'
+        ]) &&
+        isValidString(data.id, 3, 257) &&
+        data.id == relationshipId &&
+        isValidString(data.patientId, 1, 128) &&
+        isValidString(data.patientName, 1, 60) &&
+        isValidString(data.caregiverId, 1, 128) &&
+        data.patientId != data.caregiverId &&
+        relationshipId == data.patientId + '_' + data.caregiverId &&
+        isValidOptionalString(data, 'caregiverName', 1, 60) &&
+        data.status is string &&
+        data.status in ['active', 'revoked'] &&
+        (!('permissions' in data) || (
+          data.permissions is list &&
+          data.permissions.size() <= 2 &&
+          data.permissions.hasOnly(['view_adherence', 'receive_alerts'])
+        )) &&
+        (!('allowedMedicationIds' in data) || data.allowedMedicationIds == null || (
+          data.allowedMedicationIds is list &&
+          data.allowedMedicationIds.size() <= 100 &&
+          (
+            data.allowedMedicationIds.size() == 0 || (
+              isValidString(data.allowedMedicationIds[0], 1, 100) &&
+              isValidString(data.allowedMedicationIds[data.allowedMedicationIds.size() - 1], 1, 100)
+            )
+          )
+        )) &&
+        data.inviteCode is string &&
+        data.inviteCode.size() == 6 &&
+        data.inviteCode.matches('^[A-Z0-9]{6}$') &&
+        isTimestampOrDateStr(data.createdAt) &&
+        isValidOptionalDate(data, 'updatedAt');
+    }
+
+    function isInviteRedeemedInBatch(inviteCode, patientId, caregiverUid) {
+      let beforeDoc = get(/databases/$(database)/documents/caregiver_invites/$(inviteCode));
+      let afterDoc = getAfter(/databases/$(database)/documents/caregiver_invites/$(inviteCode));
+      return beforeDoc.data.patientId == patientId &&
+             beforeDoc.data.status == 'pending' &&
+             (!(beforeDoc.data.expiresAt is timestamp) || beforeDoc.data.expiresAt > request.time) &&
+             afterDoc.data.status == 'accepted' &&
+             afterDoc.data.usedBy == caregiverUid;
+    }
+
+    function hasValidInviteForPairing(inviteCode, patientId, caregiverUid) {
+      return exists(/databases/$(database)/documents/caregiver_invites/$(inviteCode)) &&
+             existsAfter(/databases/$(database)/documents/caregiver_invites/$(inviteCode)) &&
+             isInviteRedeemedInBatch(inviteCode, patientId, caregiverUid);
+    }
+
+    // ===============================================================
+    // Rules by Collection
+    // ===============================================================
+
+    // 1. Users Profile Collection
+    match /users/{userId} {
+      allow read: if isPatientOrCaregiver(userId);
+      allow create: if isOwner(userId) &&
+                       isValidUser(request.resource.data) &&
+                       (!('caregiverIds' in request.resource.data) || request.resource.data.caregiverIds == null || request.resource.data.caregiverIds.size() == 0) &&
+                       (!('dependentIds' in request.resource.data) || request.resource.data.dependentIds == null || request.resource.data.dependentIds.size() == 0) &&
+                       (!('fcmTokens' in request.resource.data) || request.resource.data.fcmTokens == null || request.resource.data.fcmTokens.size() == 0) &&
+                       request.resource.data.get('emailVerifiedAt', null) == null &&
+                       request.resource.data.get('emailOtpVerified', false) == false;
+      allow update: if isOwner(userId) &&
+                       isValidUser(request.resource.data) &&
+                       (!('id' in resource.data) || request.resource.data.id == resource.data.id) &&
+                       (!('email' in resource.data) || request.resource.data.email == resource.data.email) &&
+                       (!('createdAt' in resource.data) || request.resource.data.createdAt == resource.data.createdAt) &&
+                       areImmutableFieldsUnchanged(['caregiverIds', 'dependentIds', 'fcmTokens', 'emailVerifiedAt', 'emailOtpVerified']) &&
+                       (!('phoneVerified' in request.resource.data) || !('phoneVerified' in resource.data) || request.resource.data.phoneVerified == resource.data.phoneVerified);
+      allow delete: if isOwner(userId);
+
+      // Subcollection: Emergency Info Card
+      match /emergency/{cardId} {
+        allow read: if isPatientOrCaregiver(userId);
+        allow create: if isOwner(userId) && isValidEmergencyCard(request.resource.data, userId);
+        allow update: if isOwner(userId) &&
+                         isValidEmergencyCard(request.resource.data, userId) &&
+                         areImmutableFieldsUnchanged(['id', 'userId']);
+        allow delete: if isOwner(userId);
+      }
+    }
+
+    // 2. Medications Collection
+    match /medications/{medicationId} {
+      allow read: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid ||
+        canCaregiverReadMedication(resource.data.userId, medicationId)
+      );
+      allow create: if isAuthenticated() &&
+                       isOtpVerified() &&
+                       request.resource.data.userId == request.auth.uid &&
+                       isValidMedication(request.resource.data);
+      allow update: if isAuthenticated() &&
+                       isOtpVerified() &&
+                       resource.data.userId == request.auth.uid &&
+                       isValidMedication(request.resource.data) &&
+                       areImmutableFieldsUnchanged(['id', 'userId', 'createdAt']);
+      allow delete: if isAuthenticated() &&
+                       isOtpVerified() &&
+                       resource.data.userId == request.auth.uid;
+    }
+
+    // 3. Inventory Collection
+    match /inventory/{inventoryId} {
+      allow read: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid ||
+        isCaregiverOf(resource.data.userId)
+      );
+      allow create: if isAuthenticated() &&
+                       isOtpVerified() &&
+                       request.resource.data.userId == request.auth.uid &&
+                       isValidInventoryItem(request.resource.data);
+      allow update: if isAuthenticated() &&
+                       isOtpVerified() &&
+                       resource.data.userId == request.auth.uid &&
+                       request.resource.data.userId == resource.data.userId &&
+                       isValidInventoryItem(request.resource.data) &&
+                       areImmutableFieldsUnchanged(['id', 'userId', 'medicationId']);
+      allow delete: if isAuthenticated() &&
+                       isOtpVerified() &&
+                       resource.data.userId == request.auth.uid;
+    }
+
+    // 4. Intake Logs Collection
+    match /intake_logs/{logId} {
+      allow read: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid ||
+        isCaregiverOf(resource.data.userId)
+      );
+      allow create: if isAuthenticated() &&
+                       isOtpVerified() &&
+                       request.resource.data.userId == request.auth.uid &&
+                       isValidIntakeLog(request.resource.data) &&
+                       request.resource.data.get('caregiverAlertSent', null) == null &&
+                       request.resource.data.get('alertSentAt', null) == null &&
+                       request.resource.data.get('reconciledAt', null) == null &&
+                       request.resource.data.get('reconciledBy', null) == null;
+      allow update: if isAuthenticated() &&
+                       isOtpVerified() &&
+                       resource.data.userId == request.auth.uid &&
+                       request.resource.data.userId == resource.data.userId &&
+                       isValidIntakeLog(request.resource.data) &&
+                       areImmutableFieldsUnchanged([
+                         'id', 'userId', 'medicationId', 'scheduledTime',
+                         'caregiverAlertSent', 'alertSentAt', 'reconciledAt', 'reconciledBy'
+                       ]);
+      allow delete: if isAuthenticated() &&
+                       isOtpVerified() &&
+                       resource.data.userId == request.auth.uid;
+    }
+
+    // 5. Caregivers Collection (Atomic WriteBatch pairing via single-use invite)
+    match /caregivers/{relationshipId} {
+      allow read: if isAuthenticated() && (
+        resource.data.patientId == request.auth.uid ||
+        resource.data.caregiverId == request.auth.uid
+      );
+      allow create: if isAuthenticated() &&
+                       isValidCaregiverRelationship(request.resource.data, relationshipId) &&
+                       request.resource.data.caregiverId == request.auth.uid &&
+                       request.resource.data.status == 'active' &&
+                       hasValidInviteForPairing(
+                         request.resource.data.inviteCode,
+                         request.resource.data.patientId,
+                         request.auth.uid
+                       );
+      allow update: if isAuthenticated() &&
+                       isValidCaregiverRelationship(request.resource.data, relationshipId) &&
+                       (
+                         (
+                           (
+                             resource.data.patientId == request.auth.uid ||
+                             resource.data.caregiverId == request.auth.uid
+                           ) &&
+                           resource.data.status in ['active', 'revoked'] &&
+                           request.resource.data.status == 'revoked' &&
+                           areImmutableFieldsUnchanged([
+                             'id', 'patientId', 'patientName', 'caregiverId',
+                             'caregiverName', 'inviteCode', 'permissions',
+                             'allowedMedicationIds', 'createdAt'
+                           ])
+                         ) ||
+                         (
+                           resource.data.status == 'revoked' &&
+                           request.resource.data.status == 'active' &&
+                           relationshipId == request.resource.data.patientId + '_' + request.resource.data.caregiverId &&
+                           request.auth.uid == request.resource.data.caregiverId &&
+                           request.resource.data.patientId == resource.data.patientId &&
+                           request.resource.data.caregiverId == resource.data.caregiverId &&
+                           hasValidInviteForPairing(
+                             request.resource.data.inviteCode,
+                             request.resource.data.patientId,
+                             request.auth.uid
+                           )
+                         )
+                       );
+      allow delete: if isAuthenticated() && (
+        resource.data.patientId == request.auth.uid ||
+        resource.data.caregiverId == request.auth.uid
+      );
+    }
+
+    // 6. Caregiver Alerts Queue
+    match /caregiver_alerts/{alertId} {
+      allow read: if isAuthenticated() && (
+        resource.data.patientId == request.auth.uid ||
+        resource.data.caregiverId == request.auth.uid
+      );
+      allow create: if isAuthenticated() &&
+                       isOtpVerified() &&
+                       isValidCaregiverAlert(request.resource.data) &&
+                       request.resource.data.status == 'pending' &&
+                       (
+                         request.resource.data.patientId == request.auth.uid ||
+                         request.resource.data.caregiverId == request.auth.uid
+                       ) &&
+                       isActiveCaregiverRelationship(
+                         request.resource.data.patientId,
+                         request.resource.data.caregiverId
+                       );
+      allow update: if isAuthenticated() &&
+                       isOtpVerified() &&
+                       (
+                         resource.data.patientId == request.auth.uid ||
+                         resource.data.caregiverId == request.auth.uid
+                       ) &&
+                       isValidCaregiverAlert(request.resource.data) &&
+                       areImmutableFieldsUnchanged(['patientId', 'caregiverId', 'createdAt']);
+      allow delete: if isAuthenticated() &&
+                       isOtpVerified() &&
+                       (
+                         resource.data.patientId == request.auth.uid ||
+                         resource.data.caregiverId == request.auth.uid
+                       );
+    }
+
+    // 7. OTP Challenges (Server-side Cloud Functions only)
+    match /otp_challenges/{uid} {
+      allow read, write: if false;
+    }
+
+    // 8. Caregiver Invites Collection (Short-lived 24h single-use pairing codes)
+    match /caregiver_invites/{code} {
+      allow get: if isAuthenticated() && (
+        resource == null ||
+        resource.data.patientId == request.auth.uid ||
+        resource.data.status == 'pending'
+      );
+      allow list: if isAuthenticated() && resource.data.patientId == request.auth.uid;
+      allow create: if isAuthenticated() &&
+                       isOtpVerified() &&
+                       isValidCaregiverInvite(request.resource.data, code) &&
+                       request.resource.data.patientId == request.auth.uid &&
+                       request.resource.data.status == 'pending' &&
+                       (!(request.resource.data.expiresAt is timestamp) || (
+                         request.resource.data.expiresAt > request.time &&
+                         request.resource.data.expiresAt <= request.time + duration.value(25, 'h')
+                       )) &&
+                       (!('usedBy' in request.resource.data) || request.resource.data.usedBy == null) &&
+                       (!('usedAt' in request.resource.data) || request.resource.data.usedAt == null);
+      allow update: if isAuthenticated() &&
+                       isOtpVerified() &&
+                       isValidCaregiverInvite(request.resource.data, code) && (
+                         (
+                           resource.data.patientId == request.auth.uid &&
+                           resource.data.status in ['pending', 'expired'] &&
+                           request.resource.data.status == 'expired' &&
+                           areImmutableFieldsUnchanged([
+                             'code', 'patientId', 'patientName', 'allowedMedicationIds',
+                             'createdAt', 'expiresAt', 'usedBy', 'usedAt'
+                           ])
+                         ) ||
+                         (
+                           resource.data.patientId != request.auth.uid &&
+                           resource.data.status == 'pending' &&
+                           (!(resource.data.expiresAt is timestamp) || resource.data.expiresAt > request.time) &&
+                           request.resource.data.status == 'accepted' &&
+                           request.resource.data.usedBy == request.auth.uid &&
+                           areImmutableFieldsUnchanged([
+                             'code', 'patientId', 'patientName', 'allowedMedicationIds',
+                             'createdAt', 'expiresAt'
+                           ])
+                         )
+                       );
+      allow delete: if isAuthenticated() &&
+                       isOtpVerified() &&
+                       resource.data.patientId == request.auth.uid;
+    }
+
+    // ===============================================================
+    // Default Deny Fallback
+    // ===============================================================
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

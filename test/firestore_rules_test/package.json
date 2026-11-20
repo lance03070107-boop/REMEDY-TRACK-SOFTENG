@@ -1,0 +1,16 @@
+{
+  "name": "remedy-track-firestore-rules-test",
+  "version": "1.0.0",
+  "description": "Comprehensive security rules unit test suite for RemedyTrack",
+  "main": "firestore_rules.test.js",
+  "scripts": {
+    "test": "node ./node_modules/mocha/bin/mocha.js --timeout 20000 firestore_rules.test.js"
+  },
+  "dependencies": {
+    "@firebase/rules-unit-testing": "^3.0.4",
+    "firebase": "^10.13.0"
+  },
+  "devDependencies": {
+    "mocha": "^10.7.3"
+  }
+}

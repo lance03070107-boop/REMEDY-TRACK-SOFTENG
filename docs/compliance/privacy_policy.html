@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Privacy Policy - RemedyTrack</title>
+  <style>
+    :root {
+      --primary: #0284C7;
+      --primary-dark: #0369A1;
+      --bg: #F8FAFC;
+      --card-bg: #FFFFFF;
+      --text: #1E293B;
+      --text-muted: #64748B;
+      --border: #E2E8F0;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --primary: #38BDF8;
+        --primary-dark: #0284C7;
+        --bg: #0F172A;
+        --card-bg: #1E293B;
+        --text: #F1F5F9;
+        --text-muted: #94A3B8;
+        --border: #334155;
+      }
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background-color: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      padding: 2rem 1rem;
+    }
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+      background: var(--card-bg);
+      padding: 2.5rem;
+      border-radius: 12px;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+      border: 1px solid var(--border);
+    }
+    .badge {
+      display: inline-block;
+      background: #E0F2FE;
+      color: #0369A1;
+      font-size: 0.8rem;
+      font-weight: 600;
+      padding: 0.35rem 0.75rem;
+      border-radius: 9999px;
+      margin-bottom: 1rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    h1 {
+      font-size: 2rem;
+      color: var(--primary);
+      margin-bottom: 0.5rem;
+      font-weight: 800;
+    }
+    .meta {
+      font-size: 0.9rem;
+      color: var(--text-muted);
+      margin-bottom: 2rem;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 1rem;
+    }
+    h2 {
+      font-size: 1.3rem;
+      margin: 1.8rem 0 0.8rem 0;
+      color: var(--text);
+      border-bottom: 2px solid var(--border);
+      padding-bottom: 0.3rem;
+    }
+    h3 {
+      font-size: 1.05rem;
+      margin: 1.2rem 0 0.5rem 0;
+      color: var(--primary);
+    }
+    p { margin-bottom: 1rem; }
+    ul { margin: 0 0 1.2rem 1.5rem; }
+    li { margin-bottom: 0.4rem; }
+    .callout {
+      background: #FEF3C7;
+      border-left: 4px solid #F59E0B;
+      padding: 1rem;
+      border-radius: 0 8px 8px 0;
+      margin: 1.5rem 0;
+      color: #92400E;
+      font-size: 0.95rem;
+    }
+    .footer {
+      margin-top: 3rem;
+      padding-top: 1.5rem;
+      border-top: 1px solid var(--border);
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <span class="badge">Legal & Privacy Compliance</span>
+    <h1>Privacy Policy for RemedyTrack</h1>
+    <div class="meta">
+      <strong>Effective Date:</strong> October 12, 2026 &bull; 
+      <strong>Governing Law:</strong> Republic Act No. 10173 (Data Privacy Act of 2012, Philippines)
+    </div>
+
+    <div class="callout">
+      <strong>DRAFT NOTICE:</strong> This privacy statement is prepared for academic capstone presentation and app store submission for RemedyTrack (Laguna University).
+    </div>
+
+    <h2>1. Introduction</h2>
+    <p>RemedyTrack ("we", "our", or "the Application") is an adherence tracking mobile application developed at Laguna University (Santa Cruz, Laguna, Philippines) to support safe and consistent medication adherence. We are committed to safeguarding personal and sensitive health information in compliance with Republic Act No. 10173 (Data Privacy Act of 2012) and regulations issued by the National Privacy Commission (NPC).</p>
+
+    <h2>2. Data We Collect</h2>
+    <h3>A. Account &amp; Identity Information</h3>
+    <ul>
+      <li><strong>User Profile:</strong> Email address, display name, account creation timestamp, and Firebase UID.</li>
+      <li><strong>Emergency Contact Details:</strong> Name, phone number, and relationship (stored in private user document).</li>
+    </ul>
+
+    <h3>B. Sensitive Health &amp; Medication Data</h3>
+    <p>In accordance with Section 3(l) of RA 10173, medication details constitute sensitive personal information:</p>
+    <ul>
+      <li><strong>Medication Records:</strong> Generic name, brand name, dosage strength, formulation, instructions, and schedules.</li>
+      <li><strong>Intake Logs:</strong> Scheduled timestamps, confirmation timestamps, and status (<code>taken</code>, <code>skipped</code>, <code>snoozed</code>, <code>missed</code>).</li>
+      <li><strong>Inventory Metrics:</strong> Physical tablet/capsule balances, refill reserves, and replenishment projections.</li>
+    </ul>
+
+    <h3>C. Technical Diagnostics &amp; Push Identifiers</h3>
+    <ul>
+      <li><strong>Push Notification Tokens:</strong> Firebase Cloud Messaging (FCM) registration tokens used exclusively for alarm sync.</li>
+      <li><strong>Crash Reporting:</strong> Automated diagnostics via Firebase Crashlytics. Personally Identifiable Information (email, patient name, medication names, and dosages) is strictly stripped prior to transmission.</li>
+      <li><strong>Biometrics:</strong> Fingerprint and facial biometrics are verified entirely on-device by operating system hardware. RemedyTrack never receives or stores biometric vectors.</li>
+    </ul>
+
+    <h2>3. Purpose and Legal Basis for Processing</h2>
+    <p>Processing is conducted under Section 12 and Section 13(a) of RA 10173 based upon explicit user consent and contractual necessity to provide core adherence tracking services, local notifications, low-stock warnings, and optional caregiver observation.</p>
+
+    <h2>4. Caregiver Linking &amp; Role-Based Access</h2>
+    <p>Users may optionally pair with a caregiver using single-use 6-character codes. Caregivers receive <strong>read-only</strong> access to schedules, intake logs, and inventory balances. Caregivers cannot edit or delete patient records. Patients may revoke caregiver authorization at any moment.</p>
+
+    <h2>5. Security &amp; Data Storage</h2>
+    <ul>
+      <li><strong>Cloud Storage:</strong> Data is securely hosted on Google Cloud Platform / Firebase in the Southeast Asia region (<code>asia-southeast1</code>).</li>
+      <li><strong>Encryption:</strong> TLS 1.3 encryption in transit and AES-256 encryption at rest.</li>
+      <li><strong>Device Security:</strong> Cleartext HTTP is disabled, and operating system cloud backups are blocked (<code>android:allowBackup="false"</code>).</li>
+    </ul>
+
+    <h2 id="deletion">6. Account Deletion &amp; Right to Erasure</h2>
+    <p>Users retain full rights to delete their data at any time:</p>
+    <ul>
+      <li><strong>In-App Deletion:</strong> Tap <em>Settings &rarr; Account &rarr; Delete Account</em> to permanently erase all profile records, medications, intake logs, and inventory.</li>
+      <li><strong>Web Deletion Requests:</strong> Email <code>dpo@remedytrack.app</code> with the registered account email. All associated data will be purged within 30 days.</li>
+    </ul>
+
+    <h2>7. Data Protection Officer (DPO) Contact</h2>
+    <p>For questions or privacy inquiries under RA 10173:</p>
+    <ul>
+      <li><strong>Contact:</strong> Data Protection Officer, RemedyTrack Project</li>
+      <li><strong>Institution:</strong> College of Computer Studies, Laguna University</li>
+      <li><strong>Address:</strong> Laguna Sports Complex, Brgy. Bubukal, Santa Cruz, Laguna, 4009, Philippines</li>
+      <li><strong>Email:</strong> <a href="mailto:dpo@remedytrack.app">dpo@remedytrack.app</a></li>
+    </ul>
+
+    <div class="footer">
+      &copy; 2026 RemedyTrack Project &bull; Laguna University &bull; All Rights Reserved.
+    </div>
+  </div>
+</body>
+</html>
+
