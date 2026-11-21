@@ -608,6 +608,107 @@ class _InsightsViewState extends State<InsightsView>
     );
   }
 
+  Future<void> _confirmDeleteSingleLog(
+    BuildContext context,
+    IntakeViewModel intakeVm,
+    IntakeLog log,
+    bool is24h,
+  ) async {
+    final schedLabel =
+        '${TimeFormatter.formatFriendlyDate(log.scheduledTime, includeDayOfWeek: false)}, ${TimeFormatter.formatTime(log.scheduledTime, is24Hour: is24h)}';
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete Dose Record?'),
+        content: Text(
+          'Permanently delete the dosage history record for ${log.medicationName} ($schedLabel)? This cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(ctx).colorScheme.error,
+              foregroundColor: Theme.of(ctx).colorScheme.onError,
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !context.mounted) return;
+    final success = await intakeVm.deleteHistoryLog(log);
+    if (!context.mounted) return;
+    final scheme = Theme.of(context).colorScheme;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          success
+              ? 'Deleted ${log.medicationName} history record.'
+              : intakeVm.errorMessage ?? 'Could not delete history record.',
+        ),
+        backgroundColor: success ? null : scheme.error,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  Future<void> _confirmDeleteAllHistory(
+    BuildContext context,
+    IntakeViewModel intakeVm,
+    AuthViewModel authVm,
+  ) async {
+    final count = intakeVm.allLogs.length;
+    if (count == 0) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete All Dosage History?'),
+        content: Text(
+          'This will permanently delete all $count dosage history ${count == 1 ? 'record' : 'records'}. Your medications and current stock counts will not be affected. This cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(ctx).colorScheme.error,
+              foregroundColor: Theme.of(ctx).colorScheme.onError,
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete All'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !context.mounted) return;
+    final uid = authVm.currentUserId.isNotEmpty
+        ? authVm.currentUserId
+        : (intakeVm.allLogs.isNotEmpty ? intakeVm.allLogs.first.userId : '');
+    final success = await intakeVm.deleteAllHistory(uid);
+    if (!context.mounted) return;
+    final scheme = Theme.of(context).colorScheme;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          success
+              ? 'All dosage history deleted.'
+              : intakeVm.errorMessage ?? 'Could not delete dosage history.',
+        ),
+        backgroundColor: success ? null : scheme.error,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
   Widget _buildHistoryTab(
     BuildContext context,
     ThemeData theme,
@@ -615,6 +716,9 @@ class _InsightsViewState extends State<InsightsView>
     MedicationViewModel medVm,
     bool is24h,
   ) {
+    final isCaregiverMode =
+        context.watch<CaregiverViewModel?>()?.isCaregiverMode ?? false;
+    final authVm = context.read<AuthViewModel>();
     final query = _searchController.text.trim().toLowerCase();
     final allLogs = intakeVm.allLogs;
 
@@ -639,7 +743,12 @@ class _InsightsViewState extends State<InsightsView>
           children: [
             // Search Bar & Filter Chips
             Padding(
-              padding: const EdgeInsets.all(DesignTokens.spaceLg),
+              padding: const EdgeInsets.fromLTRB(
+                DesignTokens.spaceLg,
+                DesignTokens.spaceLg,
+                DesignTokens.spaceLg,
+                DesignTokens.spaceSm,
+              ),
               child: Column(
                 children: [
                   TextField(
@@ -683,6 +792,44 @@ class _InsightsViewState extends State<InsightsView>
                       }).toList(),
                     ),
                   ),
+                  if (!isCaregiverMode && allLogs.isNotEmpty) ...[
+                    const SizedBox(height: DesignTokens.spaceSm),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          '${filteredLogs.length} ${filteredLogs.length == 1 ? 'record' : 'records'}',
+                          style: theme.textTheme.labelMedium?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        TextButton.icon(
+                          style: TextButton.styleFrom(
+                            foregroundColor: theme.colorScheme.error,
+                          ),
+                          onPressed: intakeVm.isDeletingHistory
+                              ? null
+                              : () => _confirmDeleteAllHistory(
+                                    context,
+                                    intakeVm,
+                                    authVm,
+                                  ),
+                          icon: intakeVm.isDeletingHistory
+                              ? SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: theme.colorScheme.error,
+                                  ),
+                                )
+                              : const Icon(Icons.delete_sweep_rounded, size: 18),
+                          label: const Text('Delete All'),
+                        ),
+                      ],
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -771,8 +918,32 @@ class _InsightsViewState extends State<InsightsView>
                                   ),
                               ],
                             ),
-                            trailing:
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
                                 StatusChip(status: log.status, compact: true),
+                                if (!isCaregiverMode) ...[
+                                  const SizedBox(width: 4),
+                                  IconButton(
+                                    icon: Icon(
+                                      Icons.delete_outline_rounded,
+                                      color: theme.colorScheme.error,
+                                      size: 20,
+                                    ),
+                                    tooltip: 'Delete record',
+                                    visualDensity: VisualDensity.compact,
+                                    onPressed: intakeVm.isDeletingHistory
+                                        ? null
+                                        : () => _confirmDeleteSingleLog(
+                                              context,
+                                              intakeVm,
+                                              log,
+                                              is24h,
+                                            ),
+                                  ),
+                                ],
+                              ],
+                            ),
                           ),
                         );
                       },

@@ -241,7 +241,7 @@ void main() {
         id: 'sim_syrup',
         userId: 'sim_user',
         name: 'Paracetamol Suspension',
-        strength: '120mg/5mL',
+        strength: '120mg',
         form: MedicationForm.syrup,
         doseAmount: 5.0,
         createdAt: DateTime(2026, 1, 1),

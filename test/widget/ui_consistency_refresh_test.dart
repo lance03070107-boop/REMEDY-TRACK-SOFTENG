@@ -45,7 +45,7 @@ void main() {
       userId: 'patient_ui_refresh_01',
       name: 'Cetirizine Syrup',
       genericName: 'Cetirizine',
-      strength: '5 mg/5 mL',
+      strength: '5mg/mL',
       form: MedicationForm.syrup,
       doseAmount: 5.0,
       colorTag: 0xFF1E66F5,

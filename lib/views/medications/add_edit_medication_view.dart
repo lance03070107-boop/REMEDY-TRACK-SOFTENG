@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -741,11 +742,19 @@ class _AddEditMedicationViewState extends State<AddEditMedicationView> {
                               child: CustomTextField(
                                 controller: _strengthController,
                                 label: 'Dosage Strength *',
-                                hint: 'e.g., 500mg, 20mg/5mL',
+                                hint: 'e.g., 500mg',
                                 textInputAction: TextInputAction.next,
                                 maxLength: AppConstants.maxStrengthLength,
+                                hideCounter: true,
+                                maxLengthEnforcement:
+                                    MaxLengthEnforcement.enforced,
+                                inputFormatters: [
+                                  LengthLimitingTextInputFormatter(
+                                    AppConstants.maxStrengthLength,
+                                  ),
+                                ],
                                 helperText:
-                                    'e.g., 500mg or 20mg/5mL (1–${AppConstants.maxStrengthLength} chars)',
+                                    'e.g., 500mg or 10mL (max ${AppConstants.maxStrengthLength} chars)',
                                 validator: MedicationValidator.validateStrength,
                               ),
                             ),

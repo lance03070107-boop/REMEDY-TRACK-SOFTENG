@@ -14,6 +14,7 @@ import '../models/medication.dart';
 import '../repositories/intake_repository.dart';
 import '../services/alarm_id_generator.dart';
 import '../services/alarm_scheduler.dart';
+import '../services/alarm_sound_service.dart';
 import '../services/crashlytics_service.dart';
 
 class IntakeViewModel extends ChangeNotifier {
@@ -24,6 +25,7 @@ class IntakeViewModel extends ChangeNotifier {
   String? _activeUserId;
   List<IntakeLog> _allLogs = [];
   bool _isLoading = false;
+  bool _isDeletingHistory = false;
   String? _errorMessage;
   static bool _isFlushingPendingIntakes = false;
 
@@ -35,6 +37,7 @@ class IntakeViewModel extends ChangeNotifier {
 
   List<IntakeLog> get allLogs => List.unmodifiable(_allLogs);
   bool get isLoading => _isLoading;
+  bool get isDeletingHistory => _isDeletingHistory;
   String? get errorMessage => _errorMessage;
   bool get hasError => _errorMessage != null;
 
@@ -525,12 +528,13 @@ class IntakeViewModel extends ChangeNotifier {
         scheduledTime,
         terminal: true,
       );
+      await AlarmSoundService().stopAlarm();
+      await _cancelMatchingScheduledAlarm(medication, scheduledTime);
       await _intakeRepository.recordIntakeAtomic(
         intakeLog: intakeLog,
         decrementInventory: isEligibleForAutoDecrement(medication),
       );
       _upsertLocalLog(intakeLog);
-      await _cancelMatchingScheduledAlarm(medication, scheduledTime);
       _errorMessage = null;
       return true;
     } catch (e, stack) {
@@ -560,6 +564,13 @@ class IntakeViewModel extends ChangeNotifier {
     );
 
     try {
+      await AlarmScheduler.markDoseAcknowledged(
+        medication.id,
+        missedLog.scheduledTime,
+        terminal: true,
+      );
+      await AlarmSoundService().stopAlarm();
+      await _cancelMatchingScheduledAlarm(medication, missedLog.scheduledTime);
       await _intakeRepository.recordIntakeAtomic(
         intakeLog: updatedLog,
         decrementInventory: isEligibleForAutoDecrement(medication),
@@ -690,12 +701,13 @@ class IntakeViewModel extends ChangeNotifier {
         scheduledTime,
         terminal: true,
       );
+      await AlarmSoundService().stopAlarm();
+      await _cancelMatchingScheduledAlarm(medication, scheduledTime);
       await _intakeRepository.recordIntakeAtomic(
         intakeLog: intakeLog,
         decrementInventory: false,
       );
       _upsertLocalLog(intakeLog);
-      await _cancelMatchingScheduledAlarm(medication, scheduledTime);
       _errorMessage = null;
       return true;
     } catch (e, stack) {
@@ -783,12 +795,13 @@ class IntakeViewModel extends ChangeNotifier {
         scheduledTime,
         terminal: false,
       );
+      await AlarmSoundService().stopAlarm();
+      await _cancelMatchingScheduledAlarm(medication, scheduledTime);
       await _intakeRepository.recordIntakeAtomic(
         intakeLog: intakeLog,
         decrementInventory: false,
       );
       _upsertLocalLog(intakeLog);
-      await _cancelMatchingScheduledAlarm(medication, scheduledTime);
       final notifId = AlarmIdGenerator.generateDoseAlarmId(
         medicationId: medication.id,
         scheduledDateTime: scheduledTime,
@@ -808,6 +821,72 @@ class IntakeViewModel extends ChangeNotifier {
       unawaited(CrashlyticsService.recordError(e, stack));
       notifyListeners();
       return false;
+    }
+  }
+
+  /// Permanently deletes a single dosage history record without altering inventory stock.
+  Future<bool> deleteHistoryLog(IntakeLog log) async {
+    if (log.id.trim().isEmpty) return false;
+    try {
+      await _intakeRepository.deleteIntakeLog(log.id);
+      _allLogs = _allLogs.where((l) => l.id != log.id).toList();
+      _errorMessage = null;
+      notifyListeners();
+      return true;
+    } catch (e, stack) {
+      _errorMessage = ErrorMapper.map(e, stack).message;
+      unawaited(CrashlyticsService.recordError(e, stack));
+      notifyListeners();
+      return false;
+    }
+  }
+
+  /// Permanently deletes all dosage history records for [userId] without altering inventory stock.
+  Future<bool> deleteAllHistory(String userId) async {
+    if (_isDeletingHistory || userId.trim().isEmpty) return false;
+    _isDeletingHistory = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      await _intakeRepository.deleteAllIntakeLogs(userId);
+      _allLogs = [];
+
+      // Also drop any queued offline background intakes for this user so deleted history
+      // is not resurrected on the next reconnect flush.
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final pendingRaw =
+            prefs.getStringList('pending_background_intakes') ?? const [];
+        if (pendingRaw.isNotEmpty) {
+          final remaining = pendingRaw.where((raw) {
+            try {
+              final map = jsonDecode(raw) as Map<String, dynamic>;
+              final logMap = map['log'] as Map<String, dynamic>?;
+              final entryUid =
+                  (logMap?['userId'] ?? map['userId'])?.toString() ?? '';
+              return entryUid.isNotEmpty && entryUid != userId;
+            } catch (_) {
+              return false;
+            }
+          }).toList();
+          if (remaining.isEmpty) {
+            await prefs.remove('pending_background_intakes');
+          } else {
+            await prefs.setStringList('pending_background_intakes', remaining);
+          }
+        }
+      } catch (_) {}
+
+      _errorMessage = null;
+      return true;
+    } catch (e, stack) {
+      _errorMessage = ErrorMapper.map(e, stack).message;
+      unawaited(CrashlyticsService.recordError(e, stack));
+      return false;
+    } finally {
+      _isDeletingHistory = false;
+      notifyListeners();
     }
   }
 

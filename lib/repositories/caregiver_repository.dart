@@ -221,7 +221,8 @@ class FirebaseCaregiverRepository implements CaregiverRepository {
       );
     }
 
-    final normalizedCode = code.trim().toUpperCase();
+    final normalizedCode =
+        code.replaceAll(RegExp(r'[^A-Za-z0-9]'), '').toUpperCase();
     if (!RegExp(r'^[A-Z0-9]{6}$').hasMatch(normalizedCode)) {
       throw const ValidationException(
         'Please enter a valid 6-character pairing code.',
@@ -277,8 +278,10 @@ class FirebaseCaregiverRepository implements CaregiverRepository {
             }
           }
         } on FirebaseFunctionsException catch (fnEx) {
-          if (fnEx.code == 'not-found' ||
-              fnEx.code == 'failed-precondition' ||
+          // Only short-circuit explicit business-rule rejections from a deployed callable.
+          // Do NOT short-circuit 'not-found' because undeployed / 404 Cloud Functions also
+          // return FirebaseFunctionsException(code: 'not-found') even when the invite exists in Firestore!
+          if (fnEx.code == 'failed-precondition' ||
               fnEx.code == 'deadline-exceeded' ||
               fnEx.code == 'invalid-argument') {
             throw ValidationException(
@@ -287,7 +290,7 @@ class FirebaseCaregiverRepository implements CaregiverRepository {
             );
           }
           AppLogger.d(
-            'acceptCaregiverInvite callable fallback to Firestore: $fnEx',
+            'acceptCaregiverInvite callable fallback to Firestore (${fnEx.code}): $fnEx',
             tag: 'CaregiverRepository',
           );
         } catch (fnErr) {
@@ -300,7 +303,14 @@ class FirebaseCaregiverRepository implements CaregiverRepository {
 
       final inviteRef =
           _firestore.collection('caregiver_invites').doc(normalizedCode);
-      final inviteSnap = await inviteRef.get().timeout(_networkTimeout);
+      DocumentSnapshot<Map<String, dynamic>> inviteSnap;
+      try {
+        inviteSnap = await inviteRef
+            .get(const GetOptions(source: Source.server))
+            .timeout(_networkTimeout);
+      } catch (_) {
+        inviteSnap = await inviteRef.get().timeout(_networkTimeout);
+      }
 
       if (!inviteSnap.exists || inviteSnap.data() == null) {
         throw const ValidationException(
@@ -341,14 +351,20 @@ class FirebaseCaregiverRepository implements CaregiverRepository {
       final relationshipId = '${invite.patientId}_$caregiverId';
       final relRef =
           _firestore.collection(AppConstants.colCaregivers).doc(relationshipId);
-      final existingRelSnap = await relRef.get().timeout(_networkTimeout);
-      if (existingRelSnap.exists &&
-          existingRelSnap.data()?['status'] == 'active') {
-        throw const ValidationException(
-          'You are already linked as a caregiver for this patient.',
-          code: 'ALREADY_LINKED',
-        );
-      }
+      // Safely check whether an active relationship already exists; ignore permission-denied
+      // on non-existent docs (firestore.rules requires resource.data.caregiverId == uid on read).
+      try {
+        final existingRelSnap = await relRef.get().timeout(_networkTimeout);
+        if (existingRelSnap.exists &&
+            existingRelSnap.data()?['status'] == 'active') {
+          throw const ValidationException(
+            'You are already linked as a caregiver for this patient.',
+            code: 'ALREADY_LINKED',
+          );
+        }
+      } on ValidationException {
+        rethrow;
+      } catch (_) {}
       final now = DateTime.now();
 
       final batch = _firestore.batch();

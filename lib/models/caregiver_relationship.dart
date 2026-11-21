@@ -94,22 +94,32 @@ class CaregiverInvite {
     return diff.isNegative ? Duration.zero : diff;
   }
 
+  static DateTime _parseDateTime(dynamic raw, DateTime fallback) {
+    if (raw == null) return fallback;
+    if (raw is DateTime) return raw.toLocal();
+    if (raw is String) {
+      return DateTime.tryParse(raw)?.toLocal() ?? fallback;
+    }
+    if (raw is int) {
+      return DateTime.fromMillisecondsSinceEpoch(raw).toLocal();
+    }
+    try {
+      return ((raw as dynamic).toDate() as DateTime).toLocal();
+    } catch (_) {
+      return fallback;
+    }
+  }
+
   factory CaregiverInvite.fromJson(Map<String, dynamic> json) {
+    final now = DateTime.now();
     return CaregiverInvite(
-      code: json['code'] as String? ?? '',
+      code: (json['code'] as String? ?? '').trim().toUpperCase(),
       patientId: json['patientId'] as String? ?? '',
       patientName: json['patientName'] as String? ?? 'Patient',
       status: json['status'] as String? ?? 'pending',
-      createdAt: json['createdAt'] != null
-          ? (json['createdAt'] is String
-              ? DateTime.parse(json['createdAt'] as String)
-              : (json['createdAt'] as dynamic).toDate() as DateTime)
-          : DateTime.now(),
-      expiresAt: json['expiresAt'] != null
-          ? (json['expiresAt'] is String
-              ? DateTime.parse(json['expiresAt'] as String)
-              : (json['expiresAt'] as dynamic).toDate() as DateTime)
-          : DateTime.now().add(const Duration(hours: 24)),
+      createdAt: _parseDateTime(json['createdAt'], now),
+      expiresAt:
+          _parseDateTime(json['expiresAt'], now.add(const Duration(hours: 24))),
     );
   }
 

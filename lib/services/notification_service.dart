@@ -654,6 +654,19 @@ class NotificationService {
             await androidPlugin.createNotificationChannel(channel);
           }
 
+          // Create silent visual tray channel for primary alarms where native
+          // RemedyAlarmPlayer owns the authoritative STREAM_ALARM audio playback.
+          const visualTrayChannel = AndroidNotificationChannel(
+            'remedy_alarm_visual_tray_v1',
+            'Medication Alarm Actions',
+            description:
+                'Full-screen medication alarm quick actions (Taken / Snooze / Skip) paired with RemedyTrack alarm audio.',
+            importance: Importance.max,
+            playSound: false,
+            enableVibration: false,
+          );
+          await androidPlugin.createNotificationChannel(visualTrayChannel);
+
           const refillChannel = AndroidNotificationChannel(
             AppConstants.refillChannelId,
             AppConstants.refillChannelName,

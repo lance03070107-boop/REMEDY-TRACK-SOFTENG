@@ -44,7 +44,6 @@ import 'viewmodels/intake_viewmodel.dart';
 import 'viewmodels/inventory_viewmodel.dart';
 import 'viewmodels/medication_viewmodel.dart';
 import 'viewmodels/settings_viewmodel.dart';
-import 'views/widgets/app_lock_overlay.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -375,7 +374,7 @@ class _FirebaseConnectionErrorViewState
   }
 }
 
-/// Primary application shell with MultiProvider and AppLockOverlay integration.
+/// Primary application shell with MultiProvider integration.
 class RemedyTrackApp extends StatefulWidget {
   final MedicationRepository? medicationRepository;
   final IntakeRepository? intakeRepository;
@@ -431,6 +430,7 @@ class _RemedyTrackAppState extends State<RemedyTrackApp>
     _fcmService = FcmService();
     _pdfReportService = PdfReportService();
     _secureStorage = SecureStorageService();
+    unawaited(_secureStorage.delete('rt_sec_biometric_enrolled'));
     _connectivityService = ConnectivityService();
     _connectivityService.addListener(_onConnectivityChanged);
     _analyticsService = AnalyticsService();
@@ -1298,8 +1298,6 @@ class _RemedyTrackAppState extends State<RemedyTrackApp>
             themeMode: settingsVm.themeMode,
             theme: AppTheme.light(isHighContrast: settingsVm.isHighContrast),
             darkTheme: AppTheme.dark(isHighContrast: settingsVm.isHighContrast),
-            builder: (context, child) =>
-                AppLockOverlay(child: child ?? const SizedBox.shrink()),
           );
         },
       ),

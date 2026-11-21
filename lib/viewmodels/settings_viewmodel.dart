@@ -8,11 +8,9 @@ class SettingsViewModel extends ChangeNotifier {
   ThemeMode _themeMode = ThemeMode.system;
   bool _isHighContrast = false;
   bool _is24HourFormat = false;
-  bool _isBiometricEnabled = false;
   bool _isAnalyticsConsentGiven = false;
   int _snoozeMinutes = AppConstants.defaultSnoozeDurationMinutes;
   int _escalationMinutes = AppConstants.defaultEscalationMinutes;
-  int _lockTimeoutSeconds = AppConstants.defaultLockTimeoutSeconds;
   String _alarmSound = AppConstants.defaultAlarmSound;
   bool _taglishPromptsEnabled = true;
   AnalyticsService? _analyticsService;
@@ -25,11 +23,9 @@ class SettingsViewModel extends ChangeNotifier {
   ThemeMode get themeMode => _themeMode;
   bool get isHighContrast => _isHighContrast;
   bool get is24HourFormat => _is24HourFormat;
-  bool get isBiometricEnabled => _isBiometricEnabled;
   bool get isAnalyticsConsentGiven => _isAnalyticsConsentGiven;
   int get snoozeMinutes => _snoozeMinutes;
   int get escalationMinutes => _escalationMinutes;
-  int get lockTimeoutSeconds => _lockTimeoutSeconds;
   String get alarmSound => _alarmSound;
   bool get taglishPromptsEnabled => _taglishPromptsEnabled;
 
@@ -41,16 +37,20 @@ class SettingsViewModel extends ChangeNotifier {
 
   Future<void> loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
+    // Clean up any legacy biometric preference keys
+    if (prefs.containsKey('remedy_biometric_enabled')) {
+      await prefs.remove('remedy_biometric_enabled');
+    }
+    if (prefs.containsKey('remedy_lock_timeout_seconds')) {
+      await prefs.remove('remedy_lock_timeout_seconds');
+    }
+
     final themeIndex = prefs.getInt(AppConstants.keyThemeMode) ?? 0;
     _themeMode = ThemeMode.values[themeIndex];
     _isHighContrast = prefs.getBool(AppConstants.keyHighContrast) ?? false;
     _is24HourFormat = prefs.getBool(AppConstants.keyTimeFormat24h) ?? false;
-    _isBiometricEnabled =
-        prefs.getBool(AppConstants.keyBiometricEnabled) ?? false;
     _isAnalyticsConsentGiven =
         prefs.getBool(AnalyticsService.keyAnalyticsConsent) ?? false;
-    _lockTimeoutSeconds = prefs.getInt(AppConstants.keyLockTimeoutSeconds) ??
-        AppConstants.defaultLockTimeoutSeconds;
     _snoozeMinutes = prefs.getInt(AppConstants.keySnoozeMinutes) ??
         AppConstants.defaultSnoozeDurationMinutes;
     _escalationMinutes = prefs.getInt(AppConstants.keyEscalationMinutes) ??
@@ -91,13 +91,6 @@ class SettingsViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> setBiometricEnabled(bool value) async {
-    _isBiometricEnabled = value;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(AppConstants.keyBiometricEnabled, value);
-    notifyListeners();
-  }
-
   Future<void> setSnoozeMinutes(int minutes) async {
     _snoozeMinutes = minutes;
     final prefs = await SharedPreferences.getInstance();
@@ -109,13 +102,6 @@ class SettingsViewModel extends ChangeNotifier {
     _escalationMinutes = minutes;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(AppConstants.keyEscalationMinutes, minutes);
-    notifyListeners();
-  }
-
-  Future<void> setLockTimeoutSeconds(int seconds) async {
-    _lockTimeoutSeconds = seconds;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(AppConstants.keyLockTimeoutSeconds, seconds);
     notifyListeners();
   }
 

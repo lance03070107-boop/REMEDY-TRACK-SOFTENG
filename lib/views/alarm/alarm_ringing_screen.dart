@@ -135,6 +135,15 @@ class _AlarmRingingScreenState extends State<AlarmRingingScreen>
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
+        // Cancel the primary scheduled tray notification and native alarm immediately so
+        // the system notification channel never double-rings while this ringing screen is open.
+        if (widget.notificationId != 0) {
+          unawaited(
+            context
+                .read<NotificationService>()
+                .cancelNotification(widget.notificationId),
+          );
+        }
         if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
           const MethodChannel('com.remedytrack.app/alarm_window')
               .invokeMethod<void>(

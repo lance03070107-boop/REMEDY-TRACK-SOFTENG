@@ -23,6 +23,7 @@ class CustomTextField extends StatelessWidget {
   final ValueChanged<String>? onFieldSubmitted;
   final int maxLines;
   final int? maxLength;
+  final bool hideCounter;
   final MaxLengthEnforcement? maxLengthEnforcement;
 
   const CustomTextField({
@@ -46,6 +47,7 @@ class CustomTextField extends StatelessWidget {
     this.onFieldSubmitted,
     this.maxLines = 1,
     this.maxLength,
+    this.hideCounter = false,
     this.maxLengthEnforcement,
   });
 
@@ -81,6 +83,7 @@ class CustomTextField extends StatelessWidget {
             helperText: helperText,
             helperMaxLines: 2,
             errorMaxLines: 2,
+            counterText: hideCounter ? '' : null,
             suffixText: suffixText,
             prefixIcon: prefixIcon != null ? Icon(prefixIcon) : null,
             suffixIcon: suffixIcon,

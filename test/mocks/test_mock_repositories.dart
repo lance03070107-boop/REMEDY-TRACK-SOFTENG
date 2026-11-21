@@ -537,6 +537,15 @@ class MockIntakeRepository implements IntakeRepository {
     _logs.removeWhere((l) => l.id == logId);
     _controller.add(List.unmodifiable(_logs));
   }
+
+  @override
+  Future<int> deleteAllIntakeLogs(String userId) async {
+    final before = _logs.length;
+    _logs.removeWhere((l) => l.userId == userId || userId.isEmpty);
+    final deleted = before - _logs.length;
+    _controller.add(List.unmodifiable(_logs));
+    return deleted;
+  }
 }
 
 /// In-memory Mock implementation of UserRepository.

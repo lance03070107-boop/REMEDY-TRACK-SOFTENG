@@ -22,6 +22,7 @@ abstract class IntakeRepository {
   });
   Future<void> updateLogStatus(String logId, DoseStatus status);
   Future<void> deleteIntakeLog(String logId);
+  Future<int> deleteAllIntakeLogs(String userId);
 }
 
 class FirebaseIntakeRepository implements IntakeRepository {
@@ -576,6 +577,58 @@ class FirebaseIntakeRepository implements IntakeRepository {
   Future<void> deleteIntakeLog(String logId) async {
     try {
       await _commitWrite(_logsCollection.doc(logId).delete());
+      _decrementedLogIds.remove(logId);
+      _pendingDecrementLogIds.remove(logId);
+    } catch (e, stack) {
+      throw ErrorMapper.map(e, stack);
+    }
+  }
+
+  @override
+  Future<int> deleteAllIntakeLogs(String userId) async {
+    if (userId.trim().isEmpty) return 0;
+    try {
+      int totalDeleted = 0;
+      const int batchLimit = 400;
+
+      while (true) {
+        QuerySnapshot<Map<String, dynamic>> snapshot;
+        if (!_isOnline()) {
+          snapshot = await _logsCollection
+              .where('userId', isEqualTo: userId)
+              .limit(batchLimit)
+              .get(const GetOptions(source: Source.cache));
+        } else {
+          try {
+            snapshot = await _logsCollection
+                .where('userId', isEqualTo: userId)
+                .limit(batchLimit)
+                .get(const GetOptions(source: Source.serverAndCache))
+                .timeout(_readTimeout);
+          } catch (e) {
+            if (!_isOfflineError(e)) rethrow;
+            snapshot = await _logsCollection
+                .where('userId', isEqualTo: userId)
+                .limit(batchLimit)
+                .get(const GetOptions(source: Source.cache));
+          }
+        }
+
+        if (snapshot.docs.isEmpty) break;
+
+        final batch = _firestore.batch();
+        for (final doc in snapshot.docs) {
+          batch.delete(doc.reference);
+          _decrementedLogIds.remove(doc.id);
+          _pendingDecrementLogIds.remove(doc.id);
+        }
+        await _commitWrite(batch.commit());
+        totalDeleted += snapshot.docs.length;
+
+        if (snapshot.docs.length < batchLimit) break;
+      }
+
+      return totalDeleted;
     } catch (e, stack) {
       throw ErrorMapper.map(e, stack);
     }

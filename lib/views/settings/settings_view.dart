@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -17,7 +16,6 @@ import 'reliability_check_view.dart';
 /// Reorganized Settings view structured into clear sections:
 /// - General
 /// - Medication Reminders & Alarm Sounds (navigating to GlobalAlarmSoundManagerView)
-/// - Security & Biometrics (without OTP in biometrics mode)
 /// - Account & Profile
 class SettingsView extends StatefulWidget {
   const SettingsView({super.key});
@@ -365,94 +363,7 @@ class _SettingsViewState extends State<SettingsView> {
               ),
               const SizedBox(height: DesignTokens.spaceLg),
 
-              // Section 3: Security & Biometrics
-              Text(
-                'Security & Biometrics',
-                style: theme.textTheme.titleSmall?.copyWith(
-                  color: theme.colorScheme.primary,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Card(
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Column(
-                  children: [
-                    if (!kIsWeb) ...[
-                      SwitchListTile(
-                        secondary: const Icon(Icons.fingerprint_rounded),
-                        title: const Text('Biometric App Lock'),
-                        subtitle: const Text(
-                          'Protect medical records with Face ID / Fingerprint',
-                        ),
-                        value: settingsVm.isBiometricEnabled,
-                        onChanged: (val) async {
-                          if (!val) {
-                            final reauth = await ReauthDialog.show(
-                              context,
-                              title: 'Disable Biometric Security',
-                              reason:
-                                  'Re-authenticate with your account credentials to disable biometric lock.',
-                              allowEmailOtp: false,
-                            );
-                            if (reauth) {
-                              await settingsVm.setBiometricEnabled(false);
-                            }
-                          } else {
-                            await settingsVm.setBiometricEnabled(true);
-                          }
-                        },
-                      ),
-                      if (settingsVm.isBiometricEnabled) ...[
-                        const Divider(height: 1),
-                        ListTile(
-                          title: const Text('Auto-Lock Timeout'),
-                          subtitle: const Text(
-                            'Re-locks RemedyTrack after returning from background',
-                          ),
-                          trailing: DropdownButton<int>(
-                            value: const [0, 60, 300]
-                                    .contains(settingsVm.lockTimeoutSeconds)
-                                ? settingsVm.lockTimeoutSeconds
-                                : AppConstants.defaultLockTimeoutSeconds,
-                            items: const [
-                              DropdownMenuItem(
-                                value: 0,
-                                child: Text('Immediately'),
-                              ),
-                              DropdownMenuItem(
-                                value: 60,
-                                child: Text('1 minute (Default)'),
-                              ),
-                              DropdownMenuItem(
-                                value: 300,
-                                child: Text('5 minutes'),
-                              ),
-                            ],
-                            onChanged: (val) {
-                              if (val != null) {
-                                settingsVm.setLockTimeoutSeconds(val);
-                              }
-                            },
-                          ),
-                        ),
-                      ],
-                    ] else
-                      const ListTile(
-                        leading: Icon(Icons.fingerprint_rounded),
-                        title: Text('Biometric App Lock'),
-                        subtitle: Text(
-                          'Available on native Android and iOS devices',
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: DesignTokens.spaceLg),
-
-              // Section 4: Account & Profile
+              // Section 3: Account & Profile
               Text(
                 'Account & Profile',
                 style: theme.textTheme.titleSmall?.copyWith(

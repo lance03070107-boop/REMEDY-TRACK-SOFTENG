@@ -12,7 +12,6 @@ class SecureStorageService {
   static const String keyUserToken = 'rt_sec_user_token';
   static const String keyUserId = 'rt_sec_user_id';
   static const String keyUserEmail = 'rt_sec_user_email';
-  static const String keyBiometricEnrolled = 'rt_sec_biometric_enrolled';
   static const String keyFcmToken = 'rt_sec_fcm_token';
   static const String keyEncryptedMedicationCache = 'rt_sec_med_cache_v2';
 

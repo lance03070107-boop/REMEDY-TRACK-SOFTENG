@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:remedy_track/core/constants/app_constants.dart';
 import 'package:remedy_track/core/errors/app_exception.dart';
+import 'package:remedy_track/core/validation/medication_validator.dart';
 import 'package:remedy_track/models/intake_log.dart';
 import 'package:remedy_track/models/inventory_item.dart';
 import 'package:remedy_track/models/medication.dart';
@@ -537,9 +538,14 @@ void main() {
       invVm.dispose();
     });
 
-    test('Constants check for password length bounds', () {
+    test('Constants check for password length bounds and dosage strength max 7',
+        () {
       expect(AppConstants.minPasswordLength, equals(8));
       expect(AppConstants.maxPasswordLength, equals(72));
+      expect(AppConstants.maxStrengthLength, equals(7));
+      expect(MedicationValidator.validateStrength('500mg'), isNull);
+      expect(MedicationValidator.validateStrength('1000 mg'), isNull);
+      expect(MedicationValidator.validateStrength('12345678'), isNotNull);
     });
   });
 }

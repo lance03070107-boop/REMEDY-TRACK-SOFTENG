@@ -54,7 +54,8 @@ void main() {
       expect(find.text('Medication Alarm Sounds'), findsOneWidget);
       expect(find.text('Default Snooze Duration'), findsOneWidget);
       expect(find.text('Senior High-Contrast Mode'), findsOneWidget);
-      expect(find.text('Biometric App Lock'), findsOneWidget);
+      expect(find.text('Biometric App Lock'), findsNothing);
+      expect(find.text('Security & Biometrics'), findsNothing);
       expect(
           find.text('RemedyTrack v1.0.0 (Production Build)'), findsOneWidget);
 

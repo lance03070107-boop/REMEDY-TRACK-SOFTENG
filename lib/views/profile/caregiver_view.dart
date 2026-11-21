@@ -79,7 +79,22 @@ class _CaregiverViewState extends State<CaregiverView> {
               autofocus: true,
               textCapitalization: TextCapitalization.characters,
               inputFormatters: [
-                FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z0-9]')),
+                TextInputFormatter.withFunction((oldValue, newValue) {
+                  final cleaned = newValue.text
+                      .replaceAll(RegExp(r'[^a-zA-Z0-9]'), '')
+                      .toUpperCase();
+                  final truncated =
+                      cleaned.length > AppConstants.caregiverInviteCodeLength
+                          ? cleaned.substring(
+                              0, AppConstants.caregiverInviteCodeLength)
+                          : cleaned;
+                  return TextEditingValue(
+                    text: truncated,
+                    selection: TextSelection.collapsed(
+                      offset: truncated.length,
+                    ),
+                  );
+                }),
               ],
               maxLength: AppConstants.caregiverInviteCodeLength,
               style: const TextStyle(
@@ -104,8 +119,10 @@ class _CaregiverViewState extends State<CaregiverView> {
           ),
           FilledButton(
             onPressed: () async {
-              final code = _codeController.text.trim();
-              if (code.length != 6) {
+              final code = _codeController.text
+                  .replaceAll(RegExp(r'[^a-zA-Z0-9]'), '')
+                  .toUpperCase();
+              if (code.length != AppConstants.caregiverInviteCodeLength) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
                       content: Text('Please enter a valid 6-character code.')),

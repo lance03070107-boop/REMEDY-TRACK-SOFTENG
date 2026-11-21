@@ -359,7 +359,7 @@ class AlarmSoundService {
     }
   }
 
-  /// Fully terminates alarm ringing and haptics.
+  /// Fully terminates alarm ringing and haptics, stopping and disposing any active AudioPlayer.
   Future<void> stopAlarm() async {
     _isRinging = false;
     _isMuted = false;
@@ -369,11 +369,18 @@ class AlarmSoundService {
         await _nativeAlarmChannel.invokeMethod('stopNativeAlarmSound');
       } catch (_) {}
     }
-    try {
-      await _alarmPlayerInstance?.stop();
-    } catch (e, s) {
-      AppLogger.w('Stop alarm notice: $e',
-          tag: 'AlarmSoundService', error: e, stackTrace: s);
+    final player = _alarmPlayerInstance;
+    _alarmPlayerInstance = null;
+    if (player != null) {
+      try {
+        await player.stop();
+      } catch (e, s) {
+        AppLogger.w('Stop alarm notice: $e',
+            tag: 'AlarmSoundService', error: e, stackTrace: s);
+      }
+      try {
+        await player.dispose();
+      } catch (_) {}
     }
   }
 

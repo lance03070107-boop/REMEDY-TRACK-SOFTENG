@@ -6,8 +6,6 @@ class AppConstants {
   static const String keyThemeMode = 'remedy_theme_mode';
   static const String keyHighContrast = 'remedy_high_contrast';
   static const String keyOnboardingComplete = 'remedy_onboarding_complete';
-  static const String keyBiometricEnabled = 'remedy_biometric_enabled';
-  static const String keyLockTimeoutSeconds = 'remedy_lock_timeout_seconds';
   static const String keyTimeFormat24h = 'remedy_time_format_24h';
   static const String keySnoozeMinutes = 'remedy_snooze_minutes';
   static const String keyEscalationMinutes = 'remedy_escalation_minutes';
@@ -31,7 +29,7 @@ class AppConstants {
   static const int maxMedicationNameLength = 60;
   static const int maxGenericNameLength = 60;
   static const int minStrengthLength = 1;
-  static const int maxStrengthLength = 30;
+  static const int maxStrengthLength = 7;
   static const int maxInstructionsLength = 200;
   static const int maxNotesLength = 300;
   static const int maxSkipReasonLength = 200;
@@ -56,9 +54,6 @@ class AppConstants {
   static const int maxCycleDays = 365;
   static const int minTimeSlots = 1;
   static const int maxTimeSlots = 12;
-
-  // App Lock Defaults
-  static const int defaultLockTimeoutSeconds = 60; // 1 minute default
 
   // Timing & Interval Defaults
   static const int defaultSnoozeDurationMinutes = 10;

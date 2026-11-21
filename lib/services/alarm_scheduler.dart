@@ -6,12 +6,14 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:timezone/timezone.dart' as tz;
+import 'package:workmanager/workmanager.dart';
 import '../core/constants/app_constants.dart';
 import '../core/scheduling/schedule_expander.dart';
 import '../core/state/dose_state_machine.dart';
 import '../core/utils/app_logger.dart';
 import '../models/medication.dart';
 import 'alarm_id_generator.dart';
+import 'alarm_sound_service.dart';
 import 'crashlytics_service.dart';
 import 'local_medication_cache.dart';
 import 'notification_service.dart';
@@ -257,20 +259,28 @@ class AlarmScheduler {
 
   /// Shared builder creating identical AndroidNotificationDetails and DarwinNotificationDetails
   /// for medication dose alarms.
+  /// Set [playNotificationSound] to false when native Android [RemedyAlarmReceiver] /
+  /// [RemedyAlarmPlayer] owns the authoritative STREAM_ALARM audio playback so the
+  /// notification tray does not double-play sound over the full-screen alarm.
   static NotificationDetails buildAlarmNotificationDetails({
     required String tone,
     required String title,
     required String body,
+    bool playNotificationSound = true,
   }) {
-    final channelId = AppConstants.getAlarmChannelId(tone);
     final resolvedResourceTone = AppConstants.availableAlarmSounds.contains(tone)
         ? tone
         : AppConstants.defaultAlarmSound;
+    final channelId = playNotificationSound
+        ? AppConstants.getAlarmChannelId(tone)
+        : 'remedy_alarm_visual_tray_v1';
     final toneTitle = NotificationService.getToneTitle(tone);
 
     final androidDetails = AndroidNotificationDetails(
       channelId,
-      'Medication Alarms ($toneTitle)',
+      playNotificationSound
+          ? 'Medication Alarms ($toneTitle)'
+          : 'Medication Alarm Actions',
       channelDescription: AppConstants.alarmChannelDescriptionV3,
       importance: Importance.max,
       priority: Priority.max,
@@ -278,8 +288,12 @@ class AlarmScheduler {
       category: AndroidNotificationCategory.alarm,
       ongoing: true,
       visibility: NotificationVisibility.public,
+      playSound: playNotificationSound,
+      enableVibration: playNotificationSound,
       audioAttributesUsage: AudioAttributesUsage.alarm,
-      sound: RawResourceAndroidNotificationSound(resolvedResourceTone),
+      sound: playNotificationSound
+          ? RawResourceAndroidNotificationSound(resolvedResourceTone)
+          : null,
       onlyAlertOnce: true,
       actions: const <AndroidNotificationAction>[
         AndroidNotificationAction(
@@ -391,12 +405,6 @@ class AlarmScheduler {
           ? 'Prescribed dose: $formattedAmount ${medication.form.name}. $inst'
           : 'Prescribed dose: $formattedAmount ${medication.form.name}';
 
-      final notificationDetails = buildAlarmNotificationDetails(
-        tone: tone,
-        title: 'Time for your ${medication.name}',
-        body: bodyText,
-      );
-
       final payload = buildAlarmPayload(
         medication: medication,
         notificationId: notificationId,
@@ -405,6 +413,34 @@ class AlarmScheduler {
         soundId: tone,
         snoozeCount: snoozeCount,
         triggerDateTime: effectiveTriggerTime,
+      );
+
+      // Schedule native Android AlarmClock FIRST so we know whether RemedyAlarmReceiver
+      // owns the authoritative STREAM_ALARM audio playback (preventing double sound with tray notification).
+      bool nativeAlarmScheduled = false;
+      if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+        try {
+          const channel = MethodChannel('com.remedytrack.app/alarm_window');
+          final scheduled = await channel.invokeMethod<bool>(
+            'scheduleNativeAlarm',
+            {
+              'id': notificationId,
+              'triggerTimeMillis': effectiveTriggerTime.millisecondsSinceEpoch,
+              'payload': payload,
+            },
+          );
+          nativeAlarmScheduled = scheduled == true;
+        } catch (e, s) {
+          AppLogger.w('Native AlarmClock scheduling error: $e',
+              tag: 'AlarmScheduler', error: e, stackTrace: s);
+        }
+      }
+
+      final notificationDetails = buildAlarmNotificationDetails(
+        tone: tone,
+        title: 'Time for your ${medication.name}',
+        body: bodyText,
+        playNotificationSound: !nativeAlarmScheduled,
       );
 
       try {
@@ -441,21 +477,6 @@ class AlarmScheduler {
           );
         } else {
           rethrow;
-        }
-      }
-
-      // Schedule native Android AlarmClock so the screen wakes and MainActivity pops up directly
-      if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
-        try {
-          const channel = MethodChannel('com.remedytrack.app/alarm_window');
-          await channel.invokeMethod('scheduleNativeAlarm', {
-            'id': notificationId,
-            'triggerTimeMillis': effectiveTriggerTime.millisecondsSinceEpoch,
-            'payload': payload,
-          });
-        } catch (e, s) {
-          AppLogger.w('Native AlarmClock scheduling error: $e',
-              tag: 'AlarmScheduler', error: e, stackTrace: s);
         }
       }
 
@@ -534,13 +555,21 @@ class AlarmScheduler {
           triggerDateTime: escalationTrigger,
         );
 
+        final escalationNotificationDetails = buildAlarmNotificationDetails(
+          tone: tone,
+          title: 'URGENT REMINDER: ${medication.name}',
+          body:
+              'You have an unconfirmed dose of ${medication.name} from $escalationMinutes minutes ago.',
+          playNotificationSound: true,
+        );
+
         await _notificationService.flutterLocalNotificationsPlugin
             .zonedSchedule(
           escalationId,
           'URGENT REMINDER: ${medication.name}',
           'You have an unconfirmed dose of ${medication.name} from $escalationMinutes minutes ago.',
           escalationTime,
-          notificationDetails,
+          escalationNotificationDetails,
           androidScheduleMode: scheduleMode,
           uiLocalNotificationDateInterpretation:
               UILocalNotificationDateInterpretation.absoluteTime,
@@ -604,6 +633,10 @@ class AlarmScheduler {
       try {
         const channel = MethodChannel('com.remedytrack.app/alarm_window');
         await channel.invokeMethod('cancelNativeAlarm', {'id': primaryId});
+        await channel.invokeMethod(
+          'cancelNativeAlarm',
+          {'id': AlarmIdGenerator.getEscalationId(primaryId)},
+        );
         if (notificationId != primaryId) {
           await channel
               .invokeMethod('cancelNativeAlarm', {'id': notificationId});
@@ -620,7 +653,8 @@ class AlarmScheduler {
     }
   }
 
-  /// Cancels every scheduled primary, escalation, or snooze alarm associated with a dose occurrence.
+  /// Cancels every scheduled primary, escalation, or snooze alarm AND any delivered
+  /// notification currently in the tray associated with a dose occurrence.
   Future<void> cancelDoseAlarmsForOccurrence({
     required String medicationId,
     required DateTime scheduledTime,
@@ -670,6 +704,35 @@ class AlarmScheduler {
           tag: 'AlarmScheduler', error: e, stackTrace: s);
     }
 
+    // Also inspect already-delivered notifications sitting in the system notification tray
+    try {
+      final active = await _notificationService.flutterLocalNotificationsPlugin
+          .getActiveNotifications();
+      for (final notif in active) {
+        final id = notif.id;
+        if (id == null) continue;
+        final rawPayload = notif.payload;
+        if (rawPayload != null && rawPayload.isNotEmpty) {
+          try {
+            final decoded = jsonDecode(rawPayload);
+            if (decoded is Map<String, dynamic> &&
+                decoded['medId'] == medicationId) {
+              final schedRaw = decoded['sched'] as String?;
+              final sched =
+                  schedRaw != null ? DateTime.tryParse(schedRaw) : null;
+              if (sched != null &&
+                  DoseStateMachine.generateLogId(medicationId, sched) ==
+                      targetLogId) {
+                idsToCancel.add(id);
+                final primary = (decoded['primaryNotifId'] as num?)?.toInt();
+                if (primary != null) idsToCancel.add(primary);
+              }
+            }
+          } catch (_) {}
+        }
+      }
+    } catch (_) {}
+
     for (var timeIdx = 0; timeIdx < AppConstants.maxTimeSlots; timeIdx++) {
       idsToCancel.add(AlarmIdGenerator.generateDoseAlarmId(
         medicationId: medicationId,
@@ -681,6 +744,16 @@ class AlarmScheduler {
     for (final id in idsToCancel) {
       await cancelDoseAlarms(id);
     }
+
+    // Stop active alarm audio if any cancelled ID was currently ringing
+    if (idsToCancel.any(activeRingingNotificationIds.contains)) {
+      await AlarmSoundService().stopAlarm();
+    }
+
+    // Cancel any dose-specific WorkManager task if one was registered
+    try {
+      await Workmanager().cancelByUniqueName('dose_alarm_$targetLogId');
+    } catch (_) {}
   }
 
   /// Reschedules all upcoming doses for all active medications using a fair round-robin rolling window.
